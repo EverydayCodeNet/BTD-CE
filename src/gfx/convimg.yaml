@@ -1,0 +1,130 @@
+palettes:
+  - name: global_palette
+    fixed-entries:
+      # black
+      - color: {index: 0, r: 0, g: 0, b: 0}
+
+      # background color (transparent)
+      - color: {index: 1, r: 88, g: 94, b: 181}
+
+      # green (for grass)
+      - color: {index: 158, r: 158, g: 181, b: 86}
+
+      # grey (for path stone)
+      - color: {index: 159, r: 133, g: 133, b: 133}
+
+      # white
+      - color: {index: 255, r: 255, g: 255, b: 255}
+    images: automatic
+
+converts:
+  # Split towers into two groups to stay under 64KB appvar limit
+  - name: tower_sprites_1
+    palette: global_palette
+    transparent-color-index: 1
+    images:
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/bannana_farm/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/bomber/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/boomerang/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/catapult/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/dart/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/engineer/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/gattling/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/glue/*
+
+  - name: tower_sprites_2
+    palette: global_palette
+    transparent-color-index: 1
+    images:
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/ice/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/mortar/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/ninja/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/shredder/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/sniper/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/super/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/tack_farm/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/tack_pile/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/towers/wizard/*
+
+  - name: bloon_sprites
+    palette: global_palette
+    transparent-color-index: 1
+    images:
+      # base bloon colors (non-regrow, non-camo)
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/bloons/non-regrow/non-camo/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/bloons/non-regrow/non-camo/red/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/bloons/non-regrow/non-camo/ceramic/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/bloons/non-regrow/non-camo/lead/*
+      # MOAB
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/bloons/MOAB/*
+
+  - name: ui_sprites
+    palette: global_palette
+    transparent-color-index: 1
+    images:
+      # projectiles
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/projectiles/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/projectiles/bomb/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/projectiles/ninja_star/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/projectiles/spike_ball/*
+      # icons
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/icons/*
+      # effects
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/effects/MOAB/coatings/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/effects/MOAB/reinforced/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/effects/normal/coatings/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/effects/regrow/coatings/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/effects/sniper/*
+      # animations
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/bomber/fire/blue/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/bomber/fire/orange/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/explosion/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/MOAB/propeller/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/monkey_arms/blue/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/monkey_arms/grey/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/monkey_arms/red/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/monkey_arms/skin/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/monkey_arms/white/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/rangs/red_glaive/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/rangs/red_rang/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/rangs/wood_rang/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/rangs/yellow_glaive/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/tack_factory/black/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/tack_factory/silver/*
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/animations/tack_factory/striped/*
+      # chars
+      - ../../media/shapes/Derek_and_Harum1_Sprites_shapes/misc/chars/*
+
+outputs:
+  - type: c
+    include-file: gfx.h
+    palettes:
+      - global_palette
+
+  - type: appvar
+    name: BTDTW1
+    include-file: btdtw1_gfx.h
+    source-format: c
+    converts:
+      - tower_sprites_1
+
+  - type: appvar
+    name: BTDTW2
+    include-file: btdtw2_gfx.h
+    source-format: c
+    converts:
+      - tower_sprites_2
+
+  - type: appvar
+    name: BTDBLN
+    include-file: btdbln_gfx.h
+    source-format: c
+    converts:
+      - bloon_sprites
+
+  - type: appvar
+    name: BTDUI
+    include-file: btdui_gfx.h
+    source-format: c
+    converts:
+      - ui_sprites

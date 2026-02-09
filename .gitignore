@@ -1,0 +1,15 @@
+# Build artifacts
+bin/
+obj/
+
+# convimg-generated files (keep convimg.yaml)
+src/gfx/*.c
+src/gfx/*.h
+src/gfx/*.8xv
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

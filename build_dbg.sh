@@ -1,0 +1,1 @@
+cd src/gfx && convimg && cd - && make clean && make debug && open bin
