@@ -43,42 +43,55 @@ typedef struct {
 
 typedef struct bloon_t {
     position_t position;
-    gfx_sprite_t* sprite;
-    int speed;
-    uint16_t segment;                 // index of the current path segment
-    uint16_t progress_along_segment;  // how far along the current path segment
-                                      // the bloon is
+    uint8_t type;           // bloon_type_t index into BLOON_DATA[]
+    uint8_t modifiers;      // MOD_CAMO | MOD_REGROW bitmask
+    int16_t hp;             // remaining HP for this layer
+    uint8_t regrow_timer;   // frames until next regrow tick
+    uint8_t regrow_max;     // highest type this bloon can regrow to
+    uint16_t segment;       // current path segment index
+    int16_t progress;       // sub-pixel progress along segment (fixed-point x256)
+    uint8_t freeze_timer;   // frames remaining frozen (0 = not frozen)
+    uint8_t slow_timer;     // frames remaining slowed by glue (0 = not slowed)
 } bloon_t;
 
 typedef struct {
     position_t position;
-    int cooldown;
-    int angle;
-    int tick;
-    int pop_count;
-    int pierce;
-    enum { FIRST, LAST, STRONG, CLOSE } target;
-    int radius;
+    uint8_t  type;              // tower_type_t
+    uint8_t  upgrades[2];       // path 0 and 1 levels (0-4)
+    uint8_t  target_mode;       // 0=FIRST 1=LAST 2=STRONG 3=CLOSE
+    uint16_t cooldown;          // effective frames between attacks
+    uint16_t tick;              // frame counter
+    uint8_t  damage;            // effective damage
+    uint8_t  pierce;            // effective pierce
+    uint8_t  range;             // effective range pixels
+    uint8_t  damage_type;       // effective bitmask
+    uint8_t  can_see_camo;      // effective
+    uint8_t  projectile_count;  // effective
+    uint8_t  projectile_speed;  // effective
+    uint16_t total_invested;    // for sell value (80%)
+    uint16_t pop_count;
+    uint8_t  facing_angle;      // 0-255 LUT angle tower is facing
+    gfx_sprite_t* sprite;       // current tower sprite
 } tower_t;
 
 typedef struct {
     position_t position;
     gfx_sprite_t* sprite;
-    int speed;
-    int angle;
-    int pierce;
-    // need the vector (speed + direction)
-    int direction;
+    uint8_t speed;
+    uint8_t angle;              // 0-255 LUT angle
+    uint8_t pierce;
+    uint8_t damage;
+    uint8_t damage_type;        // damage_type_t bitmask
+    uint8_t lifetime;           // frames remaining before despawn
+    void* owner;                // tower_t* that fired this (for pop count)
 } projectile_t;
 
 typedef struct {
-    int max_bloons;
-    int num_bloons;
-    int delay;
-    int tick;
-    bloon_t* bloons;  // array of bloons whose size is based on `max_bloons`
-
-} round_t;
+    uint8_t group_index;    // which group in this round we're spawning
+    uint16_t spawned;       // how many spawned in current group
+    uint8_t spacing_timer;  // countdown to next spawn
+    bool complete;          // all groups finished spawning
+} round_state_t;
 
 typedef struct {
     size_t width;               // width of space in terms of `box_size`
@@ -93,21 +106,49 @@ typedef struct {
                             // contains a pointer to box (which is a list)
 } multi_list_t;
 
-typedef struct {
+typedef enum {
+    SCREEN_PLAYING,
+    SCREEN_BUY_MENU,
+    SCREEN_UPGRADE
+} game_screen_t;
+
+typedef enum {
+    TARGET_FIRST = 0,
+    TARGET_LAST,
+    TARGET_STRONG,
+    TARGET_CLOSE
+} target_mode_t;
+
+typedef enum {
+    CURSOR_SELECTED,    // placing a tower
+    CURSOR_NONE         // default circle cursor
+} cursor_type_t;
+
+typedef struct game_t_tag {
     path_t* path;
-    int hearts;
-    int coins;
+    int16_t hearts;
+    int16_t coins;
     queue_t* towers;
     multi_list_t* bloons;
     multi_list_t* projectiles;
-    round_t* rounds;
+    round_state_t round_state;
     bool exit;
-    enum { SELECTED, INFO, NONE } cursor_type;
+    cursor_type_t cursor_type;
     position_t cursor;
-    int round;
+    uint8_t round;          // 0-indexed (round 0 = "Round 1")
+    uint8_t max_round;      // 39 (easy), 59 (medium), 79 (hard)
+    bool round_active;      // bloons still spawning or on screen
+
+    game_screen_t screen;
+    uint8_t buy_menu_cursor;        // 0-7 tower selection index
+    tower_t* selected_tower;        // tower being upgraded
+    uint8_t selected_tower_type;    // tower_type_t when placing
+    uint8_t upgrade_path_sel;       // 0 or 1 - selected path in upgrade screen
+    uint8_t key_delay;              // frames until next key input accepted
 
     bool AUTOPLAY;
-    bool SHOW_STATS;
+    bool SANDBOX;
+    bool fast_forward;          // 2x speed toggle
 } game_t;
 
 #ifdef __cplusplus

@@ -175,11 +175,13 @@ void remove_and_delete(queue_t *q, list_ele_t *elem, void (*freer)(void *)) {
     if (q == NULL) return;
 
     if (elem == q->head) {
+        if (freer != NULL) freer(elem->value);
         queue_remove_head(q);
         return;
     }
 
     if (elem == q->tail) {
+        if (freer != NULL) freer(elem->value);
         queue_remove_tail(q);
         return;
     }
