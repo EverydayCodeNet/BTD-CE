@@ -74,14 +74,29 @@ static uint8_t deferred_tail = 0;
 static uint8_t deferred_count = 0;
 
 gfx_sprite_t* bloon_sprite_table[NUM_BLOON_TYPES];
+gfx_sprite_t* bloon_sprite_regrow[NUM_BLOON_TYPES];
+gfx_sprite_t* bloon_sprite_camo[NUM_BLOON_TYPES];
+gfx_sprite_t* bloon_sprite_regrow_camo[NUM_BLOON_TYPES];
 gfx_sprite_t* tower_sprite_table[NUM_TOWER_TYPES];
 gfx_sprite_t* tower_projectile_table[NUM_TOWER_TYPES];
 
-/* Projectile sprites mostly face UP (192). Boomerang faces RIGHT (0). */
+/* Tower sprites all face DOWN in raw images (corrected by +128 in draw). */
+static const uint8_t tower_native_angle[NUM_TOWER_TYPES] = {
+    192,  /* DART */
+    192,  /* TACK */
+    192,  /* SNIPER */
+    192,  /* BOMB */
+    0,    /* BOOMERANG */
+    192,  /* NINJA */
+    0,    /* ICE */
+    0,    /* GLUE */
+};
+
+/* Projectile sprite native facing direction. */
 static const uint8_t proj_native_angle[NUM_TOWER_TYPES] = {
-    192,  /* DART:      big_dart faces up */
+    64,   /* DART:      big_dart faces down */
     192,  /* TACK:      tack spike faces up */
-    0,    /* SNIPER:    N/A (hitscan) */
+    192,  /* SNIPER:    N/A (hitscan) */
     192,  /* BOMB:      bomb_small faces up */
     0,    /* BOOMERANG: wood_rang_right faces right */
     192,  /* NINJA:     ninja_star faces up (radial) */
@@ -519,8 +534,13 @@ void handlePlayingKeys(game_t* game) {
         game->key_delay = KEY_DELAY;
     }
 
-    /* Clear key: exit */
-    if (kb_Data[6] & kb_Clear) game->exit = true;
+    /* Clear key: save & return to title */
+    if (kb_Data[6] & kb_Clear) {
+        save_game(game);
+        game->menu_cursor = 0;
+        game->screen = SCREEN_TITLE;
+        game->key_delay = KEY_DELAY * 3;  /* extra debounce so title doesn't double-clear */
+    }
 }
 
 void handleBuyMenu(game_t* game) {
@@ -637,7 +657,7 @@ void handleUpgradeScreen(game_t* game) {
 
 /* ── Drawing Helpers ──────────────────────────────────────────────────── */
 
-/* Get appropriate bloon sprite based on type + state (damage, glue) */
+/* Get appropriate bloon sprite based on type + modifiers + state */
 gfx_sprite_t* get_bloon_sprite(bloon_t* bloon) {
     if (bloon->type == BLOON_MOAB) {
         if (bloon->slow_timer > 0) return moab_acid;
@@ -647,7 +667,15 @@ gfx_sprite_t* get_bloon_sprite(bloon_t* bloon) {
         return moab_undamaged;
     }
     if (bloon->type == BLOON_RED && bloon->slow_timer > 0) return red_acid;
-    return bloon_sprite_table[bloon->type];
+
+    /* Select sprite table based on camo/regrow modifiers */
+    uint8_t mods = bloon->modifiers & (MOD_CAMO | MOD_REGROW);
+    switch (mods) {
+        case MOD_REGROW:              return bloon_sprite_regrow[bloon->type];
+        case MOD_CAMO:                return bloon_sprite_camo[bloon->type];
+        case MOD_CAMO | MOD_REGROW:   return bloon_sprite_regrow_camo[bloon->type];
+        default:                      return bloon_sprite_table[bloon->type];
+    }
 }
 
 /* Get travel direction angle (0-255) from current path segment */
@@ -794,7 +822,7 @@ void drawTowers(game_t* game) {
                                    tower->position.x - half,
                                    tower->position.y - half);
         } else {
-            uint8_t rot = (uint8_t)(tower->facing_angle - proj_native_angle[tower->type] + 128);
+            uint8_t rot = (uint8_t)(tower->facing_angle - tower_native_angle[tower->type] + 128);
             gfx_RotatedScaledTransparentSprite(
                 tower->sprite,
                 tower->position.x - half,
@@ -817,7 +845,7 @@ void drawTowers(game_t* game) {
             int ty = tower->position.y - half - 10;
             if (tx < 0) tx = 0;
             gfx_PrintStringXY(buf, tx, ty);
-            gfx_SetTextFGColor(80);
+            gfx_SetTextFGColor(255);
             gfx_PrintString(" [Enter]");
         }
 

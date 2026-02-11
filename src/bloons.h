@@ -89,9 +89,14 @@ static const bloon_data_t BLOON_DATA[NUM_BLOON_TYPES] = {
 
 /* ── Bloon Sprite Lookup ─────────────────────────────────────────────── */
 
+/* 4 tables: base, regrow-only, camo-only, regrow+camo */
 extern gfx_sprite_t* bloon_sprite_table[NUM_BLOON_TYPES];
+extern gfx_sprite_t* bloon_sprite_regrow[NUM_BLOON_TYPES];
+extern gfx_sprite_t* bloon_sprite_camo[NUM_BLOON_TYPES];
+extern gfx_sprite_t* bloon_sprite_regrow_camo[NUM_BLOON_TYPES];
 
 static inline void init_bloon_sprites(void) {
+    /* Base (non-regrow, non-camo) */
     bloon_sprite_table[BLOON_RED]     = red_base;
     bloon_sprite_table[BLOON_BLUE]    = blue;
     bloon_sprite_table[BLOON_GREEN]   = green;
@@ -104,6 +109,48 @@ static inline void init_bloon_sprites(void) {
     bloon_sprite_table[BLOON_RAINBOW] = rainbow;
     bloon_sprite_table[BLOON_CERAMIC] = ceramic_normal;
     bloon_sprite_table[BLOON_MOAB]    = moab_undamaged;
+
+    /* Regrow-only */
+    bloon_sprite_regrow[BLOON_RED]     = rg_red;
+    bloon_sprite_regrow[BLOON_BLUE]    = rg_blue;
+    bloon_sprite_regrow[BLOON_GREEN]   = rg_green;
+    bloon_sprite_regrow[BLOON_YELLOW]  = rg_yellow;
+    bloon_sprite_regrow[BLOON_PINK]    = rg_pink;
+    bloon_sprite_regrow[BLOON_BLACK]   = rg_black;
+    bloon_sprite_regrow[BLOON_WHITE]   = rg_white;
+    bloon_sprite_regrow[BLOON_LEAD]    = rg_lead;
+    bloon_sprite_regrow[BLOON_ZEBRA]   = rg_zebra;
+    bloon_sprite_regrow[BLOON_RAINBOW] = rg_rainbow;
+    bloon_sprite_regrow[BLOON_CERAMIC] = rg_ceramic;
+    bloon_sprite_regrow[BLOON_MOAB]    = moab_undamaged;
+
+    /* Camo-only */
+    bloon_sprite_camo[BLOON_RED]     = c_red;
+    bloon_sprite_camo[BLOON_BLUE]    = c_blue;
+    bloon_sprite_camo[BLOON_GREEN]   = c_green;
+    bloon_sprite_camo[BLOON_YELLOW]  = c_yellow;
+    bloon_sprite_camo[BLOON_PINK]    = c_pink;
+    bloon_sprite_camo[BLOON_BLACK]   = c_black;
+    bloon_sprite_camo[BLOON_WHITE]   = c_white;
+    bloon_sprite_camo[BLOON_LEAD]    = c_lead;
+    bloon_sprite_camo[BLOON_ZEBRA]   = c_zebra;
+    bloon_sprite_camo[BLOON_RAINBOW] = c_rainbow;
+    bloon_sprite_camo[BLOON_CERAMIC] = c_ceramic;
+    bloon_sprite_camo[BLOON_MOAB]    = moab_undamaged;
+
+    /* Regrow + Camo */
+    bloon_sprite_regrow_camo[BLOON_RED]     = rc_red;
+    bloon_sprite_regrow_camo[BLOON_BLUE]    = rc_blue;
+    bloon_sprite_regrow_camo[BLOON_GREEN]   = rc_green;
+    bloon_sprite_regrow_camo[BLOON_YELLOW]  = rc_yellow;
+    bloon_sprite_regrow_camo[BLOON_PINK]    = rc_pink;
+    bloon_sprite_regrow_camo[BLOON_BLACK]   = rc_black;
+    bloon_sprite_regrow_camo[BLOON_WHITE]   = rc_white;
+    bloon_sprite_regrow_camo[BLOON_LEAD]    = rc_lead;
+    bloon_sprite_regrow_camo[BLOON_ZEBRA]   = rc_zebra;
+    bloon_sprite_regrow_camo[BLOON_RAINBOW] = rc_rainbow;
+    bloon_sprite_regrow_camo[BLOON_CERAMIC] = rc_ceramic;
+    bloon_sprite_regrow_camo[BLOON_MOAB]    = moab_undamaged;
 }
 
 /* ── Round Data ──────────────────────────────────────────────────────── */
