@@ -187,7 +187,7 @@ typedef struct {
 main()
   gfx_Begin()
   load_palette()
-  load_appvar_sprites()   // BTDTWR_init(), BTDBLN_init(), BTDUI_init()
+  load_appvar_sprites()   // BTDTW1_init(), BTDTW2_init(), BTDBLN_init(), BTDUI_init()
   gfx_SetDrawScreen()     // set up double buffering
 
   show_title_menu()       // difficulty select, load game, sandbox
@@ -217,7 +217,7 @@ main()
   }
 
   save_game()               // if between rounds
-  cleanup_appvar_sprites()  // BTDTWR_fini(), BTDBLN_fini(), BTDUI_fini()
+  // No _fini() needed — appvar data is archive-mapped, OS handles cleanup
   gfx_End()
 ```
 
@@ -237,9 +237,10 @@ Change the `convimg.yaml` output from `type: c` to `type: appvar`. The palette r
 
 | Appvar Name | Contents | Max Size |
 |-------------|----------|----------|
-| `BTDTWR` | Tower sprites (all 17 tower types and their upgrade variants) | < 64KB |
-| `BTDBLN` | Bloon sprites (all colors, camo, regrow, MOAB) | < 64KB |
-| `BTDUI` | UI elements, projectiles, effects, icons, animations | < 64KB |
+| `BTDTW1` | Tower sprites group 1 (dart, tack, bomb, boomerang, glue, etc.) | < 64KB |
+| `BTDTW2` | Tower sprites group 2 (ninja, ice, sniper, etc.) | < 64KB |
+| `BTDBLN` | Bloon sprites (all colors, MOAB, damage states) | < 64KB |
+| `BTDUI` | UI elements, projectiles, effects, icons | < 64KB |
 
 ### How It Works
 
@@ -247,21 +248,19 @@ Each appvar group generates `XXX_init()` and `XXX_fini()` functions automaticall
 
 ```c
 // In main(), call all _init() functions BEFORE gfx_Begin()
-// Check each for failure (returns false if appvar not found on calculator)
-if (!BTDTWR_init() || !BTDBLN_init() || !BTDUI_init()) {
+// Check each for failure (returns 0 if appvar not found on calculator)
+if (BTDTW1_init() == 0 || BTDTW2_init() == 0 ||
+    BTDBLN_init() == 0 || BTDUI_init() == 0) {
     // Error: missing sprite appvar files
-    // Show error message and exit
     return 1;
 }
+
+srand(rtc_Time());  // seed RNG from real-time clock
 
 gfx_Begin();
 // ... game code ...
 gfx_End();
-
-// Cleanup
-BTDTWR_fini();
-BTDBLN_fini();
-BTDUI_fini();
+// No _fini() needed — appvar data is archive-mapped, OS handles cleanup
 ```
 
 After calling `_init()`, sprite pointers work identically to embedded sprites. No code changes needed for draw calls.
@@ -270,7 +269,8 @@ After calling `_init()`, sprite pointers work identically to embedded sprites. N
 
 The `.8xv` appvar files must be shipped alongside the `.8xp` program file. Users must transfer all files to their calculator:
 - `BTDCE.8xp` (program)
-- `BTDTWR.8xv` (tower sprites)
+- `BTDTW1.8xv` (tower sprites group 1)
+- `BTDTW2.8xv` (tower sprites group 2)
 - `BTDBLN.8xv` (bloon sprites)
 - `BTDUI.8xv` (UI sprites)
 
@@ -336,8 +336,8 @@ outputs:
       - global_palette
 
   - type: appvar
-    name: BTDTWR
-    include-file: btdtwr_gfx.h
+    name: BTDTW1
+    include-file: btdtw1_gfx.h
     palettes:
       - global_palette
     converts:
@@ -591,7 +591,7 @@ static const bloon_data_t BLOON_DATA[NUM_BLOON_TYPES] = {
     {  1,   358,    BLOON_RED,     1,    0xFF,          0,   0x00,      2 }, // Blue
     {  1,   461,    BLOON_BLUE,    1,    0xFF,          0,   0x00,      3 }, // Green
     {  1,   819,    BLOON_GREEN,   1,    0xFF,          0,   0x00,      4 }, // Yellow
-    {  1,   896,    BLOON_PINK,    1,    0xFF,          0,   0x00,      5 }, // Pink
+    {  1,   896,    BLOON_YELLOW,  1,    0xFF,          0,   0x00,      5 }, // Pink
     {  1,   461,    BLOON_PINK,    2,    0xFF,          0,   0x02,     11 }, // Black
     {  1,   512,    BLOON_PINK,    2,    0xFF,          0,   0x04,     11 }, // White
     {  1,   256,    BLOON_BLACK,   2,    0xFF,          0,   0x01,     23 }, // Lead
@@ -1534,9 +1534,9 @@ static const round_def_t ROUND_DEFS[80] = {
 
 | Difficulty | Tower Cost Multiplier | Income Multiplier |
 |------------|----------------------|-------------------|
-| Easy | 0.85x (towers cost less) | 1.0x |
+| Easy | 0.85x, rounded to nearest $5 | 1.0x |
 | Medium | 1.0x | 1.0x |
-| Hard | 1.08x (towers cost more) | 0.8x (reduced income) |
+| Hard | 1.08x, rounded to nearest $5 | 0.8x (reduced income) |
 
 ### Implementation Notes
 
@@ -1550,15 +1550,16 @@ int24_t end_of_round_bonus(uint8_t round, uint8_t difficulty) {
     return bonus;
 }
 
-// Tower cost calculation
+// Tower cost calculation (wiki-standard rounding to nearest $5)
 uint16_t tower_cost(uint8_t tower_type, uint8_t difficulty) {
     uint16_t base = TOWER_DATA[tower_type].cost;
+    uint16_t cost;
     switch (difficulty) {
-        case EASY:   return (base * 85) / 100;
-        case MEDIUM: return base;
-        case HARD:   return (base * 108) / 100;
+        case EASY:   cost = (base * 85 + 50) / 100; break;
+        case HARD:   cost = (base * 108 + 50) / 100; break;
         default:     return base;
     }
+    return ((cost + 2) / 5) * 5;  // Round to nearest $5
 }
 
 // Tower sell value

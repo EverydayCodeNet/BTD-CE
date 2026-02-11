@@ -123,11 +123,26 @@ bool load_game(game_t* game) {
         /* Compute effective stats from base + upgrades */
         apply_upgrades(tower);
 
-        /* Calculate total invested for sell value */
-        tower->total_invested = TOWER_DATA[tower->type].cost;
-        for (int p = 0; p < 2; p++) {
-            for (int l = 0; l < tower->upgrades[p]; l++) {
-                tower->total_invested += TOWER_UPGRADES[tower->type][p][l].cost;
+        /* Calculate total invested for sell value (with difficulty multiplier, wiki rounding) */
+        {
+            uint16_t base, cost;
+            base = TOWER_DATA[tower->type].cost;
+            switch (game->difficulty) {
+                case 0:  cost = ((base * 85 + 50) / 100 + 2) / 5 * 5; break;
+                case 2:  cost = ((base * 108 + 50) / 100 + 2) / 5 * 5; break;
+                default: cost = base; break;
+            }
+            tower->total_invested = cost;
+            for (int p = 0; p < 2; p++) {
+                for (int l = 0; l < tower->upgrades[p]; l++) {
+                    base = TOWER_UPGRADES[tower->type][p][l].cost;
+                    switch (game->difficulty) {
+                        case 0:  cost = ((base * 85 + 50) / 100 + 2) / 5 * 5; break;
+                        case 2:  cost = ((base * 108 + 50) / 100 + 2) / 5 * 5; break;
+                        default: cost = base; break;
+                    }
+                    tower->total_invested += cost;
+                }
             }
         }
 

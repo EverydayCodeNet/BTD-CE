@@ -281,314 +281,314 @@ static const round_group_t R27[] = {
 };
 
 static const round_group_t R28[] = {
-    { BLOON_LEAD, 0, 6, 20 },
-    { BLOON_BLACK, 0, 15, 8 },
-    { BLOON_ZEBRA, 0, 8, 12 },
+    { BLOON_LEAD, 0, 4, 25 },
+    { BLOON_BLACK, 0, 10, 10 },
+    { BLOON_ZEBRA, 0, 5, 15 },
 };
 
 static const round_group_t R29[] = {
-    { BLOON_PINK, 0, 30, 3 },
-    { BLOON_BLACK, 0, 12, 6 },
-    { BLOON_WHITE, 0, 12, 6 },
-    { BLOON_ZEBRA, 0, 6, 10 },
-    { BLOON_RAINBOW, 0, 2, 25 },
+    { BLOON_PINK, 0, 18, 5 },
+    { BLOON_BLACK, 0, 8, 8 },
+    { BLOON_WHITE, 0, 8, 8 },
+    { BLOON_ZEBRA, 0, 4, 15 },
+    { BLOON_RAINBOW, 0, 2, 30 },
 };
 
 static const round_group_t R30[] = {
-    { BLOON_LEAD, 0, 8, 15 },
-    { BLOON_ZEBRA, 0, 10, 8 },
-    { BLOON_RAINBOW, 0, 4, 15 },
+    { BLOON_LEAD, 0, 5, 20 },
+    { BLOON_ZEBRA, 0, 6, 12 },
+    { BLOON_RAINBOW, 0, 3, 20 },
 };
 
 static const round_group_t R31[] = {
-    { BLOON_PINK, MOD_CAMO, 20, 5 },
-    { BLOON_BLACK, 0, 15, 6 },
-    { BLOON_WHITE, 0, 15, 6 },
-    { BLOON_ZEBRA, 0, 8, 8 },
-    { BLOON_RAINBOW, 0, 5, 12 },
+    { BLOON_PINK, MOD_CAMO, 12, 8 },
+    { BLOON_BLACK, 0, 8, 8 },
+    { BLOON_WHITE, 0, 8, 8 },
+    { BLOON_ZEBRA, 0, 5, 12 },
+    { BLOON_RAINBOW, 0, 3, 18 },
 };
 
 static const round_group_t R32[] = {
-    { BLOON_YELLOW, MOD_REGROW, 30, 3 },
-    { BLOON_ZEBRA, 0, 10, 8 },
-    { BLOON_RAINBOW, 0, 8, 10 },
+    { BLOON_YELLOW, MOD_REGROW, 15, 5 },
+    { BLOON_ZEBRA, 0, 6, 12 },
+    { BLOON_RAINBOW, 0, 4, 15 },
 };
 
 static const round_group_t R33[] = {
-    { BLOON_BLACK, MOD_REGROW, 15, 6 },
-    { BLOON_WHITE, MOD_REGROW, 15, 6 },
-    { BLOON_RAINBOW, 0, 10, 8 },
+    { BLOON_BLACK, MOD_REGROW, 8, 8 },
+    { BLOON_WHITE, MOD_REGROW, 8, 8 },
+    { BLOON_RAINBOW, 0, 5, 12 },
 };
 
 static const round_group_t R34[] = {
-    { BLOON_ZEBRA, 0, 20, 5 },
-    { BLOON_RAINBOW, 0, 12, 8 },
-    { BLOON_LEAD, 0, 5, 15 },
+    { BLOON_ZEBRA, 0, 10, 8 },
+    { BLOON_RAINBOW, 0, 6, 12 },
+    { BLOON_LEAD, 0, 3, 20 },
 };
 
 static const round_group_t R35[] = {
-    { BLOON_BLACK, MOD_CAMO | MOD_REGROW, 10, 8 },
-    { BLOON_PINK, 0, 30, 3 },
-    { BLOON_RAINBOW, 0, 15, 6 },
+    { BLOON_BLACK, MOD_CAMO | MOD_REGROW, 6, 10 },
+    { BLOON_PINK, 0, 18, 5 },
+    { BLOON_RAINBOW, 0, 6, 10 },
 };
 
 static const round_group_t R36[] = {
-    { BLOON_PINK, 0, 50, 2 },
-    { BLOON_BLACK, 0, 20, 5 },
-    { BLOON_RAINBOW, 0, 12, 6 },
-    { BLOON_LEAD, MOD_CAMO, 3, 25 },
+    { BLOON_PINK, 0, 25, 3 },
+    { BLOON_BLACK, 0, 10, 8 },
+    { BLOON_RAINBOW, 0, 6, 10 },
+    { BLOON_LEAD, MOD_CAMO, 2, 30 },
 };
 
 static const round_group_t R37[] = {
-    { BLOON_ZEBRA, MOD_REGROW, 20, 5 },
-    { BLOON_RAINBOW, 0, 15, 6 },
-    { BLOON_CERAMIC, 0, 2, 40 },
+    { BLOON_ZEBRA, MOD_REGROW, 8, 10 },
+    { BLOON_RAINBOW, 0, 6, 10 },
+    { BLOON_CERAMIC, 0, 2, 45 },
 };
 
 static const round_group_t R38[] = {
-    { BLOON_RAINBOW, 0, 20, 5 },
-    { BLOON_CERAMIC, 0, 4, 30 },
-    { BLOON_WHITE, MOD_REGROW, 20, 5 },
+    { BLOON_RAINBOW, 0, 8, 10 },
+    { BLOON_CERAMIC, 0, 3, 35 },
+    { BLOON_WHITE, MOD_REGROW, 10, 8 },
 };
 
 static const round_group_t R39[] = {
-    { BLOON_BLACK, MOD_REGROW, 30, 3 },
-    { BLOON_RAINBOW, 0, 20, 4 },
-    { BLOON_CERAMIC, 0, 6, 20 },
+    { BLOON_BLACK, MOD_REGROW, 15, 5 },
+    { BLOON_RAINBOW, 0, 8, 8 },
+    { BLOON_CERAMIC, 0, 3, 30 },
 };
 
 static const round_group_t R40[] = {
-    { BLOON_CERAMIC, 0, 10, 12 },
-    { BLOON_RAINBOW, MOD_REGROW, 15, 5 },
-    { BLOON_LEAD, MOD_CAMO, 5, 15 },
+    { BLOON_MOAB, 0, 1, 60 },
+    { BLOON_CERAMIC, 0, 3, 20 },
+    { BLOON_RAINBOW, MOD_REGROW, 4, 12 },
 };
 
 static const round_group_t R41[] = {
-    { BLOON_CERAMIC, MOD_REGROW, 8, 12 },
-    { BLOON_RAINBOW, 0, 25, 4 },
-    { BLOON_ZEBRA, MOD_CAMO, 15, 5 },
+    { BLOON_CERAMIC, MOD_REGROW, 4, 20 },
+    { BLOON_RAINBOW, 0, 10, 8 },
+    { BLOON_ZEBRA, MOD_CAMO, 8, 8 },
 };
 
 static const round_group_t R42[] = {
-    { BLOON_RAINBOW, MOD_REGROW, 20, 4 },
-    { BLOON_CERAMIC, 0, 10, 10 },
-    { BLOON_BLACK, MOD_CAMO, 20, 5 },
+    { BLOON_RAINBOW, MOD_REGROW, 8, 8 },
+    { BLOON_CERAMIC, 0, 4, 18 },
+    { BLOON_BLACK, MOD_CAMO, 10, 8 },
 };
 
 static const round_group_t R43[] = {
-    { BLOON_CERAMIC, 0, 15, 8 },
-    { BLOON_LEAD, 0, 10, 10 },
-    { BLOON_RAINBOW, MOD_CAMO, 10, 6 },
+    { BLOON_CERAMIC, 0, 6, 15 },
+    { BLOON_LEAD, 0, 5, 15 },
+    { BLOON_RAINBOW, MOD_CAMO, 5, 10 },
 };
 
 static const round_group_t R44[] = {
-    { BLOON_CERAMIC, MOD_REGROW, 12, 8 },
-    { BLOON_RAINBOW, 0, 30, 3 },
+    { BLOON_CERAMIC, MOD_REGROW, 5, 15 },
+    { BLOON_RAINBOW, 0, 12, 6 },
 };
 
 static const round_group_t R45[] = {
-    { BLOON_CERAMIC, MOD_CAMO, 10, 10 },
-    { BLOON_CERAMIC, 0, 15, 8 },
-    { BLOON_PINK, MOD_CAMO | MOD_REGROW, 30, 3 },
+    { BLOON_CERAMIC, MOD_CAMO, 4, 18 },
+    { BLOON_CERAMIC, 0, 6, 15 },
+    { BLOON_PINK, MOD_CAMO | MOD_REGROW, 15, 5 },
 };
 
 static const round_group_t R46[] = {
     { BLOON_MOAB, 0, 1, 60 },
-    { BLOON_CERAMIC, 0, 10, 10 },
+    { BLOON_CERAMIC, 0, 5, 15 },
 };
 
 static const round_group_t R47[] = {
-    { BLOON_CERAMIC, MOD_REGROW, 20, 6 },
-    { BLOON_RAINBOW, MOD_CAMO, 20, 5 },
-    { BLOON_LEAD, MOD_CAMO, 10, 10 },
+    { BLOON_CERAMIC, MOD_REGROW, 8, 12 },
+    { BLOON_RAINBOW, MOD_CAMO, 8, 10 },
+    { BLOON_LEAD, MOD_CAMO, 5, 15 },
 };
 
 static const round_group_t R48[] = {
-    { BLOON_CERAMIC, 0, 20, 6 },
+    { BLOON_CERAMIC, 0, 8, 12 },
     { BLOON_MOAB, 0, 1, 60 },
-    { BLOON_RAINBOW, MOD_REGROW, 20, 4 },
+    { BLOON_RAINBOW, MOD_REGROW, 8, 8 },
 };
 
 static const round_group_t R49[] = {
-    { BLOON_CERAMIC, MOD_REGROW, 25, 5 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 8, 12 },
-    { BLOON_RAINBOW, 0, 30, 3 },
+    { BLOON_CERAMIC, MOD_REGROW, 10, 10 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 4, 18 },
+    { BLOON_RAINBOW, 0, 12, 6 },
 };
 
 static const round_group_t R50[] = {
     { BLOON_MOAB, 0, 2, 60 },
-    { BLOON_CERAMIC, MOD_CAMO, 15, 6 },
+    { BLOON_CERAMIC, MOD_CAMO, 6, 12 },
 };
 
 static const round_group_t R51[] = {
-    { BLOON_CERAMIC, 0, 30, 4 },
-    { BLOON_RAINBOW, MOD_REGROW, 25, 4 },
-    { BLOON_LEAD, MOD_CAMO, 10, 10 },
+    { BLOON_CERAMIC, 0, 12, 8 },
+    { BLOON_RAINBOW, MOD_REGROW, 10, 8 },
+    { BLOON_LEAD, MOD_CAMO, 5, 15 },
 };
 
 static const round_group_t R52[] = {
-    { BLOON_CERAMIC, MOD_CAMO, 15, 6 },
+    { BLOON_CERAMIC, MOD_CAMO, 6, 12 },
     { BLOON_MOAB, 0, 1, 60 },
-    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 15, 5 },
+    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 6, 10 },
 };
 
 static const round_group_t R53[] = {
-    { BLOON_CERAMIC, MOD_REGROW, 20, 5 },
-    { BLOON_CERAMIC, MOD_CAMO, 15, 6 },
-    { BLOON_LEAD, MOD_CAMO, 12, 8 },
+    { BLOON_CERAMIC, MOD_REGROW, 8, 10 },
+    { BLOON_CERAMIC, MOD_CAMO, 6, 12 },
+    { BLOON_LEAD, MOD_CAMO, 6, 12 },
 };
 
 static const round_group_t R54[] = {
     { BLOON_MOAB, 0, 2, 50 },
-    { BLOON_CERAMIC, 0, 20, 5 },
+    { BLOON_CERAMIC, 0, 8, 10 },
 };
 
 static const round_group_t R55[] = {
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 20, 5 },
-    { BLOON_RAINBOW, 0, 40, 3 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 8, 10 },
+    { BLOON_RAINBOW, 0, 15, 5 },
     { BLOON_MOAB, 0, 1, 60 },
 };
 
 static const round_group_t R56[] = {
     { BLOON_MOAB, 0, 2, 45 },
-    { BLOON_CERAMIC, MOD_REGROW, 20, 5 },
-    { BLOON_LEAD, MOD_CAMO, 8, 12 },
+    { BLOON_CERAMIC, MOD_REGROW, 8, 10 },
+    { BLOON_LEAD, MOD_CAMO, 4, 18 },
 };
 
 static const round_group_t R57[] = {
-    { BLOON_CERAMIC, MOD_CAMO, 25, 4 },
-    { BLOON_RAINBOW, MOD_REGROW, 30, 3 },
+    { BLOON_CERAMIC, MOD_CAMO, 10, 8 },
+    { BLOON_RAINBOW, MOD_REGROW, 12, 6 },
     { BLOON_MOAB, 0, 1, 60 },
 };
 
 static const round_group_t R58[] = {
     { BLOON_MOAB, 0, 2, 40 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 15, 5 },
-    { BLOON_LEAD, MOD_CAMO, 10, 10 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 6, 12 },
+    { BLOON_LEAD, MOD_CAMO, 5, 15 },
 };
 
 static const round_group_t R59[] = {
-    { BLOON_CERAMIC, 0, 30, 3 },
-    { BLOON_CERAMIC, MOD_REGROW, 20, 4 },
+    { BLOON_CERAMIC, 0, 12, 6 },
+    { BLOON_CERAMIC, MOD_REGROW, 8, 8 },
     { BLOON_MOAB, 0, 2, 40 },
 };
 
 static const round_group_t R60[] = {
     { BLOON_MOAB, 0, 3, 35 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 20, 5 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 8, 10 },
 };
 
 static const round_group_t R61[] = {
-    { BLOON_MOAB, 0, 2, 35 },
-    { BLOON_CERAMIC, MOD_CAMO, 30, 3 },
-    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 20, 4 },
+    { BLOON_MOAB, 0, 2, 40 },
+    { BLOON_CERAMIC, MOD_CAMO, 12, 8 },
+    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 8, 8 },
 };
 
 static const round_group_t R62[] = {
-    { BLOON_MOAB, 0, 3, 30 },
-    { BLOON_CERAMIC, MOD_REGROW, 25, 4 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 10, 10 },
+    { BLOON_MOAB, 0, 2, 35 },
+    { BLOON_CERAMIC, MOD_REGROW, 10, 8 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 5, 15 },
 };
 
 static const round_group_t R63[] = {
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 40, 3 },
-    { BLOON_LEAD, MOD_CAMO, 15, 6 },
-    { BLOON_MOAB, 0, 2, 35 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 15, 6 },
+    { BLOON_LEAD, MOD_CAMO, 8, 10 },
+    { BLOON_MOAB, 0, 2, 40 },
 };
 
 static const round_group_t R64[] = {
     { BLOON_MOAB, 0, 3, 30 },
-    { BLOON_CERAMIC, 0, 35, 3 },
-    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 25, 4 },
+    { BLOON_CERAMIC, 0, 12, 6 },
+    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 8, 8 },
 };
 
 static const round_group_t R65[] = {
-    { BLOON_MOAB, 0, 4, 25 },
-    { BLOON_CERAMIC, MOD_CAMO, 20, 4 },
+    { BLOON_MOAB, 0, 3, 28 },
+    { BLOON_CERAMIC, MOD_CAMO, 8, 8 },
 };
 
 static const round_group_t R66[] = {
-    { BLOON_CERAMIC, MOD_REGROW, 50, 2 },
-    { BLOON_MOAB, 0, 2, 30 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 15, 8 },
+    { BLOON_CERAMIC, MOD_REGROW, 15, 5 },
+    { BLOON_MOAB, 0, 2, 35 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 6, 12 },
 };
 
 static const round_group_t R67[] = {
-    { BLOON_MOAB, 0, 3, 25 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 30, 3 },
+    { BLOON_MOAB, 0, 3, 28 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 10, 8 },
 };
 
 static const round_group_t R68[] = {
-    { BLOON_MOAB, 0, 4, 22 },
-    { BLOON_CERAMIC, MOD_CAMO, 25, 3 },
-    { BLOON_LEAD, MOD_CAMO, 12, 8 },
+    { BLOON_MOAB, 0, 3, 25 },
+    { BLOON_CERAMIC, MOD_CAMO, 10, 8 },
+    { BLOON_LEAD, MOD_CAMO, 6, 12 },
 };
 
 static const round_group_t R69[] = {
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 40, 2 },
-    { BLOON_MOAB, 0, 3, 25 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 15, 5 },
+    { BLOON_MOAB, 0, 3, 28 },
 };
 
 static const round_group_t R70[] = {
-    { BLOON_MOAB, 0, 4, 20 },
-    { BLOON_CERAMIC, MOD_REGROW, 30, 3 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 10, 10 },
+    { BLOON_MOAB, 0, 3, 25 },
+    { BLOON_CERAMIC, MOD_REGROW, 12, 6 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 5, 15 },
 };
 
 static const round_group_t R71[] = {
-    { BLOON_MOAB, 0, 3, 20 },
-    { BLOON_CERAMIC, MOD_CAMO, 35, 3 },
-    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 30, 3 },
+    { BLOON_MOAB, 0, 3, 22 },
+    { BLOON_CERAMIC, MOD_CAMO, 12, 6 },
+    { BLOON_RAINBOW, MOD_CAMO | MOD_REGROW, 10, 6 },
 };
 
 static const round_group_t R72[] = {
-    { BLOON_MOAB, 0, 4, 18 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 35, 3 },
+    { BLOON_MOAB, 0, 3, 22 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 12, 6 },
 };
 
 static const round_group_t R73[] = {
-    { BLOON_MOAB, 0, 5, 18 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 20, 6 },
-    { BLOON_CERAMIC, 0, 40, 2 },
+    { BLOON_MOAB, 0, 4, 20 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 8, 10 },
+    { BLOON_CERAMIC, 0, 12, 5 },
 };
 
 static const round_group_t R74[] = {
-    { BLOON_MOAB, 0, 4, 18 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 40, 2 },
-    { BLOON_RAINBOW, MOD_REGROW, 40, 2 },
+    { BLOON_MOAB, 0, 4, 20 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 12, 5 },
+    { BLOON_RAINBOW, MOD_REGROW, 10, 6 },
 };
 
 static const round_group_t R75[] = {
-    { BLOON_MOAB, 0, 5, 16 },
-    { BLOON_CERAMIC, MOD_CAMO, 30, 3 },
+    { BLOON_MOAB, 0, 4, 18 },
+    { BLOON_CERAMIC, MOD_CAMO, 10, 6 },
 };
 
 static const round_group_t R76[] = {
-    { BLOON_MOAB, 0, 5, 15 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 40, 2 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 15, 8 },
+    { BLOON_MOAB, 0, 4, 18 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 12, 5 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 6, 12 },
 };
 
 static const round_group_t R77[] = {
-    { BLOON_MOAB, 0, 6, 15 },
-    { BLOON_CERAMIC, MOD_REGROW, 50, 2 },
+    { BLOON_MOAB, 0, 5, 16 },
+    { BLOON_CERAMIC, MOD_REGROW, 15, 5 },
 };
 
 static const round_group_t R78[] = {
-    { BLOON_MOAB, 0, 6, 14 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 40, 2 },
-    { BLOON_LEAD, MOD_CAMO, 20, 6 },
+    { BLOON_MOAB, 0, 5, 16 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 12, 5 },
+    { BLOON_LEAD, MOD_CAMO, 8, 10 },
 };
 
 static const round_group_t R79[] = {
-    { BLOON_MOAB, 0, 7, 12 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 50, 2 },
+    { BLOON_MOAB, 0, 5, 15 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 15, 5 },
 };
 
 static const round_group_t R80[] = {
-    { BLOON_MOAB, 0, 8, 10 },
-    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 30, 3 },
-    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 15, 6 },
+    { BLOON_MOAB, 0, 6, 14 },
+    { BLOON_CERAMIC, MOD_CAMO | MOD_REGROW, 12, 6 },
+    { BLOON_LEAD, MOD_CAMO | MOD_REGROW, 6, 10 },
 };
 
 static const round_def_t ROUND_DEFS[NUM_ROUNDS] = {

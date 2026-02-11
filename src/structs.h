@@ -74,7 +74,7 @@ typedef struct {
     uint8_t  can_see_camo;      // effective
     uint8_t  projectile_count;  // effective
     uint8_t  projectile_speed;  // effective
-    uint16_t total_invested;    // for sell value (80%)
+    uint16_t total_invested;    // for sell value (70%)
     uint16_t pop_count;
     uint8_t  facing_angle;      // 0-255 LUT angle tower is facing
     gfx_sprite_t* sprite;       // current tower sprite
@@ -89,6 +89,7 @@ typedef struct {
     uint8_t  permafrost;        // applies slow after freeze wears off
     uint8_t  distraction;       // chance to knock bloon back on hit
     uint8_t  glue_soak;         // glue applies to children on pop
+    uint8_t  strips_camo;       // de-camo bloons on hit (Counter-Espionage)
 } tower_t;
 
 typedef struct {
@@ -108,6 +109,7 @@ typedef struct {
     uint8_t dot_damage;         // DoT to apply on hit (glue)
     uint8_t dot_interval;       // DoT tick interval to apply
     uint8_t glue_soak;          // glue applies to children
+    uint8_t strips_camo;        // de-camo bloons on hit
 } projectile_t;
 
 typedef struct {
@@ -157,7 +159,7 @@ typedef enum {
 typedef struct game_t_tag {
     path_t* path;
     int16_t hearts;
-    int16_t coins;
+    int24_t coins;
     queue_t* towers;
     multi_list_t* bloons;
     multi_list_t* projectiles;

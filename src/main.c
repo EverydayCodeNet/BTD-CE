@@ -17,6 +17,7 @@
 #include <fileioc.h>
 #include <graphx.h>
 #include <keypadc.h>
+#include <sys/rtc.h>
 
 // converted graphics files
 #include "gfx/gfx.h"        // palette only
@@ -40,6 +41,7 @@
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
 
+#define MAX_BLOONS      150  /* hard cap on simultaneous bloons to prevent OOM */
 #define FREEZE_DURATION 30   /* frames bloon stays frozen (~0.5s) */
 #define SLOW_DURATION   90   /* frames bloon stays slowed */
 #define SLOW_FACTOR     2    /* speed divisor when glued */
@@ -52,6 +54,24 @@
 #define SPEED_BTN_H 32
 
 #define SP_CELL_SIZE 40  /* spatial partition cell size (bigger = fewer boundary misses) */
+#define DEFERRED_QUEUE_SIZE 64  /* ring buffer for bloon children deferred by cap */
+
+/* Deferred bloon spawn queue — children that couldn't spawn due to MAX_BLOONS */
+typedef struct {
+    uint8_t type;
+    uint8_t modifiers;
+    uint8_t regrow_max;
+    uint8_t slow_timer;
+    uint8_t dot_damage;
+    uint8_t dot_interval;
+    uint16_t segment;
+    position_t position;
+} deferred_bloon_t;
+
+static deferred_bloon_t deferred_queue[DEFERRED_QUEUE_SIZE];
+static uint8_t deferred_head = 0;
+static uint8_t deferred_tail = 0;
+static uint8_t deferred_count = 0;
 
 gfx_sprite_t* bloon_sprite_table[NUM_BLOON_TYPES];
 gfx_sprite_t* tower_sprite_table[NUM_TOWER_TYPES];
@@ -68,6 +88,20 @@ static const uint8_t proj_native_angle[NUM_TOWER_TYPES] = {
     0,    /* ICE:       N/A (area) */
     0,    /* GLUE:      N/A (no sprite) */
 };
+
+/* ── Difficulty Cost Adjustment ──────────────────────────────────────── */
+
+static uint8_t g_difficulty = 1;  /* 0=easy, 1=medium, 2=hard; set by difficulty screen */
+
+uint16_t adjusted_cost(uint16_t base) {
+    uint16_t cost;
+    switch (g_difficulty) {
+        case 0:  cost = (base * 85 + 50) / 100; break;  /* Easy: 0.85x */
+        case 2:  cost = (base * 108 + 50) / 100; break; /* Hard: 1.08x */
+        default: return base;                            /* Medium: 1.0x */
+    }
+    return ((cost + 2) / 5) * 5;  /* Round to nearest $5 (wiki standard) */
+}
 
 /* ── Apply Upgrades ──────────────────────────────────────────────────── */
 
@@ -96,6 +130,7 @@ void apply_upgrades(tower_t* tower) {
     tower->permafrost = 0;
     tower->distraction = 0;
     tower->glue_soak = 0;
+    tower->strips_camo = 0;
 
     int atk_pct_mod = 0;  /* cumulative attack speed % modifier */
 
@@ -122,6 +157,7 @@ void apply_upgrades(tower_t* tower) {
             if (upg->grants_permafrost) tower->permafrost = 1;
             if (upg->grants_distraction) tower->distraction = 1;
             if (upg->grants_glue_soak) tower->glue_soak = 1;
+            if (upg->grants_strips_camo) tower->strips_camo = 1;
             tower->slow_duration += upg->delta_slow_duration;
         }
     }
@@ -253,7 +289,7 @@ tower_t* initTower(game_t* game, uint8_t type) {
     tower->target_mode = TARGET_FIRST;
     tower->upgrades[0] = 0;
     tower->upgrades[1] = 0;
-    tower->total_invested = TOWER_DATA[type].cost;
+    tower->total_invested = adjusted_cost(TOWER_DATA[type].cost);
     tower->pop_count = 0;
     tower->facing_angle = 0;
     tower->tick = 0;
@@ -298,6 +334,7 @@ projectile_t* initProjectile(game_t* game, tower_t* tower, uint8_t angle) {
     projectile->dot_damage = tower->dot_damage;
     projectile->dot_interval = tower->dot_interval;
     projectile->glue_soak = tower->glue_soak;
+    projectile->strips_camo = tower->strips_camo;
 
     (void)game;
     return projectile;
@@ -395,7 +432,7 @@ void handlePlayingKeys(game_t* game) {
         } else if (game->cursor_type == CURSOR_SELECTED) {
             /* Try to place tower (cursor = center of tower) */
             uint8_t type = game->selected_tower_type;
-            uint16_t cost = TOWER_DATA[type].cost;
+            uint16_t cost = adjusted_cost(TOWER_DATA[type].cost);
             gfx_sprite_t* spr = tower_sprite_table[type];
             int half_w = spr->width / 2;
             int half_h = spr->height / 2;
@@ -553,7 +590,7 @@ void handleUpgradeScreen(game_t* game) {
          * If the OTHER path already has 3+, this path can only go to 2. */
         uint8_t max_level = (tower->upgrades[other] >= 3) ? 2 : 4;
         if (tower->upgrades[path] < max_level) {
-            uint16_t cost = TOWER_UPGRADES[tower->type][path][tower->upgrades[path]].cost;
+            uint16_t cost = adjusted_cost(TOWER_UPGRADES[tower->type][path][tower->upgrades[path]].cost);
             bool can_afford = game->SANDBOX || (game->coins >= (int16_t)cost);
             if (can_afford) {
                 if (!game->SANDBOX) game->coins -= cost;
@@ -573,7 +610,7 @@ void handleUpgradeScreen(game_t* game) {
 
     /* − key: sell tower */
     if (kb_Data[6] & kb_Sub) {
-        uint16_t refund = (tower->total_invested * 80) / 100;
+        uint16_t refund = (tower->total_invested * 70) / 100;
         if (!game->SANDBOX) game->coins += refund;
         /* Remove tower from the towers list */
         list_ele_t* curr = game->towers->head;
@@ -633,7 +670,7 @@ void drawHUD(game_t* game) {
     gfx_HorizLine(0, 14, SCREEN_WIDTH);
 
     gfx_SetTextFGColor(255);  /* yellow - visible in this palette */
-    gfx_PrintStringXY("HP:", 4, 3);
+    gfx_PrintStringXY("HP: ", 4, 3);
     gfx_PrintInt(game->hearts, 1);
 
     gfx_PrintStringXY("Round: ", 80, 3);
@@ -670,6 +707,17 @@ void drawCursor(game_t* game) {
                      !overlaps_tower(game, tl, spr->width, spr->height);
         gfx_SetColor(valid ? 30 : 133);  /* green or red */
         gfx_Circle(x, y, range);
+        /* Cost label above tower */
+        {
+            uint16_t cost = adjusted_cost(TOWER_DATA[game->selected_tower_type].cost);
+            bool can_afford = game->SANDBOX || game->coins >= (int24_t)cost;
+            gfx_SetTextFGColor(can_afford ? 255 : 133);  /* white or red */
+            int cy = y - half - 12;
+            if (cy < 0) cy = y + half + 2;
+            gfx_SetTextXY(x - 12, cy);
+            gfx_PrintChar('$');
+            gfx_PrintInt(cost, 1);
+        }
     } else {
         /* Small selection circle */
         gfx_SetColor(255);
@@ -746,7 +794,7 @@ void drawTowers(game_t* game) {
                                    tower->position.x - half,
                                    tower->position.y - half);
         } else {
-            uint8_t rot = (uint8_t)(tower->facing_angle - proj_native_angle[tower->type]);
+            uint8_t rot = (uint8_t)(tower->facing_angle - proj_native_angle[tower->type] + 128);
             gfx_RotatedScaledTransparentSprite(
                 tower->sprite,
                 tower->position.x - half,
@@ -756,15 +804,21 @@ void drawTowers(game_t* game) {
             );
         }
 
-        /* Show target mode letter if cursor hovers this tower */
+        /* Show range circle + target mode + [Enter] hint if cursor hovers */
         if (game->cursor.x >= tower->position.x - half &&
             game->cursor.x < tower->position.x + half &&
             game->cursor.y >= tower->position.y - half &&
             game->cursor.y < tower->position.y + half) {
+            gfx_SetColor(255);
+            gfx_Circle(tower->position.x, tower->position.y, tower->range);
             gfx_SetTextFGColor(148);
             char buf[2] = { TARGET_CHARS[tower->target_mode], '\0' };
-            gfx_PrintStringXY(buf, tower->position.x - 3,
-                               tower->position.y - half - 10);
+            int tx = tower->position.x - 28;
+            int ty = tower->position.y - half - 10;
+            if (tx < 0) tx = 0;
+            gfx_PrintStringXY(buf, tx, ty);
+            gfx_SetTextFGColor(80);
+            gfx_PrintString(" [Enter]");
         }
 
         curr_elem = curr_elem->next;
@@ -900,7 +954,7 @@ void drawBuyMenu(game_t* game) {
             char buf[8];
             buf[0] = '$';
             /* int to string for cost */
-            uint16_t c = TOWER_DATA[i].cost;
+            uint16_t c = adjusted_cost(TOWER_DATA[i].cost);
             int len = 1;
             if (c >= 1000) buf[len++] = '0' + (c / 1000) % 10;
             if (c >= 100)  buf[len++] = '0' + (c / 100) % 10;
@@ -941,16 +995,11 @@ void drawUpgradeScreen(game_t* game) {
     gfx_SetColor(24);
     gfx_FillRectangle(0, sy, SCREEN_WIDTH, 12);
     gfx_SetTextFGColor(255);
-    gfx_PrintStringXY("Dmg:", 4, sy + 2);
-    gfx_SetTextXY(32, sy + 2); gfx_PrintInt(tower->damage, 1);
-    gfx_PrintStringXY("Prc:", 56, sy + 2);
-    gfx_SetTextXY(84, sy + 2); gfx_PrintInt(tower->pierce, 1);
-    gfx_PrintStringXY("Rng:", 108, sy + 2);
-    gfx_SetTextXY(136, sy + 2); gfx_PrintInt(tower->range, 1);
-    gfx_PrintStringXY("Spd:", 164, sy + 2);
-    gfx_SetTextXY(192, sy + 2); gfx_PrintInt(tower->cooldown, 1);
-    gfx_PrintStringXY("Pops:", 220, sy + 2);
-    gfx_SetTextXY(256, sy + 2); gfx_PrintInt(tower->pop_count, 1);
+    gfx_PrintStringXY("Dmg: ", 2, sy + 2); gfx_PrintInt(tower->damage, 1);
+    gfx_PrintStringXY("Prc: ", 60, sy + 2); gfx_PrintInt(tower->pierce, 1);
+    gfx_PrintStringXY("Rng: ", 118, sy + 2); gfx_PrintInt(tower->range, 1);
+    gfx_PrintStringXY("Spd: ", 182, sy + 2); gfx_PrintInt(tower->cooldown, 1);
+    gfx_PrintStringXY("Pops: ", 244, sy + 2); gfx_PrintInt(tower->pop_count, 1);
 
     /* Two columns for upgrade paths */
     const int col_x[2] = { 4, 162 };
@@ -991,7 +1040,7 @@ void drawUpgradeScreen(game_t* game) {
                 gfx_PrintStringXY("OK", col_x[path] + col_w - 22, y + 6);
             } else if (level == tower->upgrades[path] && level < max_level) {
                 /* Next available upgrade */
-                uint16_t cost = TOWER_UPGRADES[tower->type][path][level].cost;
+                uint16_t cost = adjusted_cost(TOWER_UPGRADES[tower->type][path][level].cost);
                 gfx_SetColor(8);
                 gfx_FillRectangle(col_x[path], y, col_w, 20);
                 gfx_SetColor(is_sel ? 255 : 60);
@@ -1017,18 +1066,19 @@ void drawUpgradeScreen(game_t* game) {
     gfx_SetColor(24);
     gfx_FillRectangle(0, SCREEN_HEIGHT - 14, SCREEN_WIDTH, 14);
     gfx_SetTextFGColor(255);
-    gfx_PrintStringXY("Sell:$", 4, SCREEN_HEIGHT - 12);
-    gfx_SetTextXY(52, SCREEN_HEIGHT - 12);
-    gfx_PrintInt((tower->total_invested * 80) / 100, 1);
-    gfx_PrintStringXY("[-]Sell [Enter]Buy [Del]Back", 110, SCREEN_HEIGHT - 12);
+    gfx_PrintStringXY("Sell: $", 4, SCREEN_HEIGHT - 12);
+    gfx_PrintInt((tower->total_invested * 70) / 100, 1);
+    gfx_PrintStringXY("[-]Sell [Enter]Buy [Del]Back", 116, SCREEN_HEIGHT - 12);
 
-    /* Target mode display */
+    /* Target mode display with [Mode] hint */
     {
         static const char* TARGET_LABELS[] = {"FIRST","LAST","STRONG","CLOSE"};
         gfx_SetTextFGColor(148);
         const char* label = TARGET_LABELS[tower->target_mode];
-        int lw = gfx_GetStringWidth(label);
+        int lw = gfx_GetStringWidth(label) + gfx_GetStringWidth(" [Mode]");
         gfx_PrintStringXY(label, SCREEN_WIDTH - lw - 4, 18);
+        gfx_SetTextFGColor(80);
+        gfx_PrintString(" [Mode]");
     }
 }
 
@@ -1084,6 +1134,55 @@ int moveBloon(game_t* game, bloon_t* bloon) {
 
 /* ── Bloon Popping ───────────────────────────────────────────────────── */
 
+/* Enqueue a child bloon to spawn later when below cap */
+static void defer_child(uint8_t type, uint8_t modifiers, uint8_t regrow_max,
+                        uint16_t segment, position_t pos,
+                        uint8_t slow, uint8_t dot_dmg, uint8_t dot_int) {
+    if (deferred_count >= DEFERRED_QUEUE_SIZE) return;  /* queue full, truly discard */
+    deferred_bloon_t* d = &deferred_queue[deferred_tail];
+    d->type = type;
+    d->modifiers = modifiers;
+    d->regrow_max = regrow_max;
+    d->segment = segment;
+    d->position = pos;
+    d->slow_timer = slow;
+    d->dot_damage = dot_dmg;
+    d->dot_interval = dot_int;
+    deferred_tail = (deferred_tail + 1) % DEFERRED_QUEUE_SIZE;
+    deferred_count++;
+}
+
+/* Spawn deferred children when space opens up (call each frame) */
+void drain_deferred_bloons(game_t* game) {
+    int spawned = 0;
+    while (deferred_count > 0 && game->bloons->total_size < MAX_BLOONS && spawned < 4) {
+        deferred_bloon_t* d = &deferred_queue[deferred_head];
+        bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
+        if (!child) return;
+        memset(child, 0, sizeof(bloon_t));
+        child->type = d->type;
+        child->modifiers = d->modifiers;
+        child->hp = BLOON_DATA[d->type].hp;
+        child->regrow_max = d->regrow_max;
+        child->regrow_timer = REGROW_INTERVAL;
+        child->segment = d->segment;
+        child->position = d->position;
+        if (d->slow_timer > 0) {
+            child->slow_timer = d->slow_timer;
+            child->dot_damage = d->dot_damage;
+            child->dot_interval = d->dot_interval;
+            if (d->dot_damage > 0) {
+                child->dot_tick = d->dot_interval;
+                child->dot_timer = 180;
+            }
+        }
+        sp_insert(game->bloons, child->position, child);
+        deferred_head = (deferred_head + 1) % DEFERRED_QUEUE_SIZE;
+        deferred_count--;
+        spawned++;
+    }
+}
+
 void popBloon(game_t* game, bloon_t* bloon, position_t pos) {
     const bloon_data_t* data = &BLOON_DATA[bloon->type];
     game->coins += 1;
@@ -1093,14 +1192,19 @@ void popBloon(game_t* game, bloon_t* bloon, position_t pos) {
     uint8_t inherit_dot_damage = 0;
     uint8_t inherit_dot_interval = 0;
     if (bloon->slow_timer > 0) {
-        /* Check if any glue tower that could have hit this has glue_soak */
         inherit_slow = bloon->slow_timer;
         inherit_dot_damage = bloon->dot_damage;
         inherit_dot_interval = bloon->dot_interval;
     }
 
     for (int i = 0; i < data->child_count; i++) {
+        if (game->bloons->total_size >= MAX_BLOONS) {
+            defer_child(data->child_type, bloon->modifiers, bloon->regrow_max,
+                        bloon->segment, pos, inherit_slow, inherit_dot_damage, inherit_dot_interval);
+            continue;
+        }
         bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
+        if (!child) return;
         memset(child, 0, sizeof(bloon_t));
         child->type = data->child_type;
         child->modifiers = bloon->modifiers;
@@ -1123,7 +1227,13 @@ void popBloon(game_t* game, bloon_t* bloon, position_t pos) {
 
     if (data->child_type2 != 0xFF) {
         for (int i = 0; i < data->child_count2; i++) {
+            if (game->bloons->total_size >= MAX_BLOONS) {
+                defer_child(data->child_type2, bloon->modifiers, bloon->regrow_max,
+                            bloon->segment, pos, inherit_slow, inherit_dot_damage, inherit_dot_interval);
+                continue;
+            }
             bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
+            if (!child) return;
             memset(child, 0, sizeof(bloon_t));
             child->type = data->child_type2;
             child->modifiers = bloon->modifiers;
@@ -1160,6 +1270,9 @@ void spawnBloons(game_t* game) {
         rs->spacing_timer--;
         return;
     }
+
+    /* Delay spawning if at bloon cap */
+    if (game->bloons->total_size >= MAX_BLOONS) return;
 
     bloon_t* bloon = initBloon(game, group->bloon_type, group->modifiers);
     sp_insert(game->bloons, bloon->position, bloon);
@@ -1368,11 +1481,20 @@ void updateTowers(game_t* game) {
                     if (tower->projectile_count == 1) {
                         projectile_t* proj = initProjectile(game, tower, base_angle);
                         sp_insert(game->projectiles, proj->position, proj);
-                    } else {
-                        /* Multi-projectile (tack shooter, etc) */
+                    } else if (tower->type == TOWER_TACK) {
+                        /* Tack: omnidirectional 360° spread */
                         uint8_t step = 256 / tower->projectile_count;
                         for (int i = 0; i < tower->projectile_count; i++) {
                             uint8_t angle = (uint8_t)(i * step);
+                            projectile_t* proj = initProjectile(game, tower, angle);
+                            sp_insert(game->projectiles, proj->position, proj);
+                        }
+                    } else {
+                        /* Dart/Ninja/etc: tight spread toward target */
+                        int spread = 8;  /* ~11° between each projectile */
+                        int half = (tower->projectile_count - 1) * spread / 2;
+                        for (int i = 0; i < tower->projectile_count; i++) {
+                            uint8_t angle = (uint8_t)(base_angle - half + i * spread);
                             projectile_t* proj = initProjectile(game, tower, angle);
                             sp_insert(game->projectiles, proj->position, proj);
                         }
@@ -1630,6 +1752,11 @@ void checkBloonProjCollissions(game_t* game) {
                         ((tower_t*)tmp_proj->owner)->pop_count += eff_damage;
                     }
 
+                    /* Counter-Espionage: strip camo on hit */
+                    if (tmp_proj->strips_camo) {
+                        tmp_bloon->modifiers &= ~MOD_CAMO;
+                    }
+
                     /* Distraction: 25% chance to knock bloon back 1 segment */
                     if (tmp_proj->owner && ((tower_t*)tmp_proj->owner)->distraction) {
                         if ((rand() & 3) == 0 && tmp_bloon->segment > 0) {
@@ -1702,8 +1829,12 @@ void handleGame(game_t* game) {
 
     /* Check for round completion */
     round_state_t* rs = &game->round_state;
-    if (rs->complete && sp_total_size(game->bloons) == 0) {
-        game->coins += 100 + (int16_t)game->round;
+    if (rs->complete && sp_total_size(game->bloons) == 0 && deferred_count == 0) {
+        {
+            int16_t bonus = 100 + (int16_t)game->round;
+            if (game->difficulty == 2) bonus = (bonus * 4) / 5;  /* Hard: 0.8x income */
+            game->coins += bonus;
+        }
 
         /* Save at end of each round */
         save_game(game);
@@ -1723,6 +1854,7 @@ void handleGame(game_t* game) {
     }
 
     spawnBloons(game);
+    drain_deferred_bloons(game);
     updateProjectiles(game);
     updateBloons(game);
     updateTowers(game);
@@ -1870,6 +2002,7 @@ void handleTitleScreen(game_t* game) {
             case 0: /* Resume */
                 resetGameState(game);
                 load_game(game);
+                g_difficulty = game->difficulty;
                 game->screen = SCREEN_PLAYING;
                 break;
             case 1: /* New Game */
@@ -2003,8 +2136,9 @@ void handleDifficultyScreen(game_t* game) {
 
     if (kb_Data[6] & kb_Enter) {
         game->difficulty = game->menu_cursor;
+        g_difficulty = game->difficulty;
         switch (game->difficulty) {
-            case 0: game->max_round = 39; game->coins = 750; game->hearts = 200; break;
+            case 0: game->max_round = 39; game->coins = 650; game->hearts = 200; break;
             case 1: game->max_round = 59; game->coins = 650; game->hearts = 150; break;
             case 2: game->max_round = 79; game->coins = 650; game->hearts = 100; break;
         }
@@ -2097,7 +2231,7 @@ void drawGameOverScreen(game_t* game) {
         curr = curr->next;
     }
     if (best != NULL) {
-        gfx_PrintStringXY("Best Tower:", 80, 148);
+        gfx_PrintStringXY("Best Tower: ", 80, 148);
         gfx_sprite_t* spr = tower_sprite_table[best->type];
         int sx = 80;
         int sy = 164;
@@ -2170,7 +2304,7 @@ void drawVictoryScreen(game_t* game) {
         curr = curr->next;
     }
     if (best != NULL) {
-        gfx_PrintStringXY("Best Tower:", 80, 148);
+        gfx_PrintStringXY("Best Tower: ", 80, 148);
         gfx_sprite_t* spr = tower_sprite_table[best->type];
         int sx = 80;
         int sy = 164;
@@ -2232,6 +2366,7 @@ void runGame(void) {
         game->screen = SCREEN_TITLE;
     } else if (save_exists()) {
         load_game(game);
+        g_difficulty = game->difficulty;
         game->screen = SCREEN_PLAYING;
     } else {
         game->screen = SCREEN_TITLE;
@@ -2259,6 +2394,7 @@ void runGame(void) {
                 /* Fast forward: run a second game tick (no input/draw) */
                 if (game->fast_forward && game->round_active && game->screen == SCREEN_PLAYING) {
                     spawnBloons(game);
+                    drain_deferred_bloons(game);
                     updateProjectiles(game);
                     updateBloons(game);
                     updateTowers(game);
@@ -2317,6 +2453,8 @@ int main(void) {
 
     init_bloon_sprites();
     init_tower_sprites();
+
+    srand(rtc_Time());
 
     gfx_Begin();
     gfx_SetPalette(global_palette, sizeof_global_palette, 0);

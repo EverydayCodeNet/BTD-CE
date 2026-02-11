@@ -13,7 +13,7 @@ struct game_t_tag;
 
 #define SAVE_APPVAR_NAME "BTDSAVE"
 #define SETTINGS_APPVAR_NAME "BTDCFG"
-#define SAVE_VERSION 2
+#define SAVE_VERSION 3
 
 typedef struct {
     uint8_t  version;
@@ -21,7 +21,7 @@ typedef struct {
     uint8_t  max_round;
     uint8_t  difficulty;
     int16_t  hearts;
-    int16_t  coins;
+    int24_t  coins;
     uint8_t  num_towers;
     uint8_t  sandbox;
     uint8_t  freeplay;
