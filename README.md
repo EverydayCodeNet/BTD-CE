@@ -113,3 +113,9 @@ Output files are in `bin/`.
 - Original game by [Ninja Kiwi](https://ninjakiwi.com/)
 - Adapted for TI-84 Plus CE by Everyday Code, Elijah Baraw (2026)
 - Art by [Derek200](https://www.deviantart.com/derek200) on DeviantArt
+
+### Eye Candy
+![Gameplay](media/screenshots/round-33.png)
+![Buy Screen](media/screenshots/purchase-screen.png)
+![Upgrades](media/screenshots/upgrade-path.png)
+![End Screen](media/screenshots/end-screen.png)
