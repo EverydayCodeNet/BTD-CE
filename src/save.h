@@ -12,18 +12,26 @@ extern "C" {
 struct game_t_tag;
 
 #define SAVE_APPVAR_NAME "BTDSAVE"
-#define SAVE_VERSION 1
+#define SETTINGS_APPVAR_NAME "BTDCFG"
+#define SAVE_VERSION 2
 
 typedef struct {
     uint8_t  version;
-    uint8_t  round;
+    uint16_t round;
     uint8_t  max_round;
     uint8_t  difficulty;
     int16_t  hearts;
     int16_t  coins;
     uint8_t  num_towers;
     uint8_t  sandbox;
+    uint8_t  freeplay;
 } save_header_t;
+
+typedef struct {
+    uint8_t version;
+    uint8_t show_start_menu;  // 1=on, 0=off
+    uint8_t auto_start;       // 1=on, 0=off
+} settings_t;
 
 typedef struct {
     int16_t  x;
@@ -36,6 +44,9 @@ typedef struct {
 bool save_game(struct game_t_tag* game);
 bool load_game(struct game_t_tag* game);
 void delete_save(void);
+bool save_exists(void);
+bool save_settings(struct game_t_tag* game);
+bool load_settings(struct game_t_tag* game);
 
 #ifdef __cplusplus
 }

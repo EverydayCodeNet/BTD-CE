@@ -73,144 +73,162 @@ typedef struct {
     uint8_t  grants_camo;
     uint8_t  damage_type_override; /* 0 = no change */
     uint16_t cost;
+    /* Ability fields (0 = no effect) */
+    uint8_t  delta_splash;         /* splash radius change */
+    uint8_t  grants_homing;        /* projectiles become homing */
+    uint8_t  grants_stun;          /* stun duration on hit (frames) */
+    uint8_t  grants_aura;          /* tower gains slow aura */
+    uint8_t  delta_dot_damage;     /* DoT damage per tick */
+    int8_t   delta_dot_interval;   /* DoT tick rate (negative = faster) */
+    uint8_t  moab_mult;            /* MOAB damage multiplier */
+    uint8_t  grants_permafrost;    /* slow after freeze wears off */
+    uint8_t  grants_distraction;   /* knockback on hit */
+    uint8_t  grants_glue_soak;     /* glue applies to children on pop */
+    uint8_t  delta_slow_duration;  /* extra slow frames */
 } upgrade_t;
 
-/* TOWER_UPGRADES[tower_type][path][level] */
+/* TOWER_UPGRADES[tower_type][path][level]
+ * Fields: delta_damage, delta_pierce, delta_range, delta_atk_pct, delta_proj_count,
+ *         grants_camo, damage_type_override, cost,
+ *         delta_splash, grants_homing, grants_stun, grants_aura,
+ *         delta_dot_damage, delta_dot_interval, moab_mult,
+ *         grants_permafrost, grants_distraction, grants_glue_soak, delta_slow_duration
+ */
 static const upgrade_t TOWER_UPGRADES[NUM_TOWER_TYPES][2][4] = {
     /* ── Dart Monkey ─────────────────────────────────────────────────── */
     [TOWER_DART] = {
         /* Path 0: Long Range Darts -> Enhanced Eyesight -> Spike-o-pult -> Juggernaut */
         {
-            { 0,  0,  12,   0,  0, 0, 0,          90 },  /* Long Range Darts */
-            { 0,  0,   8,   0,  0, 1, 0,         120 },  /* Enhanced Eyesight */
-            { 1,  4,   0,   0,  0, 0, DMG_NORMAL, 500 },  /* Spike-o-pult */
-            { 3,  8,   0,   0,  0, 0, 0,        1800 },  /* Juggernaut */
+            { 0,  0,  12,   0,  0, 0, 0,          90,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   8,   0,  0, 1, 0,         120,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  4,   0,   0,  0, 0, DMG_NORMAL, 500,  8,0,0,0, 0,0,0, 0,0,0, 0 },  /* Spike-o-pult: splash 8 */
+            { 3,  8,   0,   0,  0, 0, 0,        1800,  0,0,0,0, 0,0,0, 0,0,0, 0 },  /* Juggernaut */
         },
         /* Path 1: Sharp Shots -> Razor Sharp -> Triple Shot -> Super Monkey Fan Club */
         {
-            { 0,  1,   0,   0,  0, 0, 0,         140 },  /* Sharp Shots */
-            { 0,  2,   0,   0,  0, 0, 0,         200 },  /* Razor Sharp */
-            { 0,  0,   0,   0,  2, 0, 0,         400 },  /* Triple Shot */
-            { 0,  0,   0, -50,  0, 0, 0,        8000 },  /* Super Monkey FC */
+            { 0,  1,   0,   0,  0, 0, 0,         140,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  2,   0,   0,  0, 0, 0,         200,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0,   0,  2, 0, 0,         400,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0, -50,  0, 0, 0,        8000,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
     },
     /* ── Tack Shooter ────────────────────────────────────────────────── */
     [TOWER_TACK] = {
         /* Path 0: Faster Shooting -> Even Faster -> Hot Shots -> Ring of Fire */
         {
-            { 0,  0,   0, -15,  0, 0, 0,         210 },
-            { 0,  0,   0, -15,  0, 0, 0,         300 },
-            { 1,  0,   0,   0,  0, 0, DMG_NORMAL, 550 },  /* Hot Shots */
-            { 2,  0,   4,   0,  0, 0, 0,        2500 },  /* Ring of Fire */
+            { 0,  0,   0, -15,  0, 0, 0,         210,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0, -15,  0, 0, 0,         300,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  0,   0,   0,  0, 0, DMG_NORMAL, 550,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 2,  0,   4,   0,  0, 0, 0,        2500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
         /* Path 1: Extra Range -> Extra Spread -> Blade Shooter -> Blade Maelstrom */
         {
-            { 0,  0,   6,   0,  0, 0, 0,         100 },
-            { 0,  0,   0,   0,  4, 0, 0,         250 },  /* +4 proj = 12 total */
-            { 1,  1,   0,   0,  0, 0, 0,         500 },  /* Blade Shooter */
-            { 1,  2,   0, -25,  0, 0, 0,        2800 },  /* Blade Maelstrom */
+            { 0,  0,   6,   0,  0, 0, 0,         100,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0,   0,  4, 0, 0,         250,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  1,   0,   0,  0, 0, 0,         500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  2,   0, -25,  0, 0, 0,        2800,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
     },
     /* ── Sniper Monkey ───────────────────────────────────────────────── */
     [TOWER_SNIPER] = {
         /* Path 0: Full Metal Jacket -> Point Five Oh -> Deadly Precision -> Cripple MOAB */
         {
-            { 2,  0,   0,   0,  0, 0, DMG_NORMAL, 350 },  /* FMJ: pops Lead */
-            { 3,  0,   0,   0,  0, 0, 0,         500 },
-            { 10, 0,   0,   0,  0, 0, 0,        3000 },
-            { 30, 0,   0,   0,  0, 0, 0,       12000 },
+            { 2,  0,   0,   0,  0, 0, DMG_NORMAL, 350,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 3,  0,   0,   0,  0, 0, 0,         500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 10, 0,   0,   0,  0, 0, 0,        3000,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 30, 0,   0,   0,  0, 0, 0,       12000,  0,0,0,0, 0,0,5, 0,0,0, 0 },  /* Cripple MOAB: 5x */
         },
         /* Path 1: Faster Firing -> Night Vision -> Semi-Auto -> Full Auto */
         {
-            { 0,  0,   0, -30,  0, 0, 0,         300 },
-            { 0,  0,   0,   0,  0, 1, 0,         350 },  /* Night Vision: camo */
-            { 0,  0,   0, -30,  0, 0, 0,        3500 },
-            { 0,  0,   0, -40,  0, 0, 0,        8000 },
+            { 0,  0,   0, -30,  0, 0, 0,         300,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0,   0,  0, 1, 0,         350,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0, -30,  0, 0, 0,        3500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0, -40,  0, 0, 0,        8000,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
     },
     /* ── Bomb Tower ──────────────────────────────────────────────────── */
     [TOWER_BOMB] = {
         /* Path 0: Bigger Bombs -> Missile Launcher -> MOAB Mauler -> MOAB Assassin */
         {
-            { 0,  8,   4,   0,  0, 0, 0,         400 },
-            { 0,  6,   0, -20,  0, 0, 0,         500 },
-            { 8,  0,   0,   0,  0, 0, 0,         800 },
-            { 20, 0,   0, -15,  0, 0, 0,        3200 },
+            { 0,  8,   4,   0,  0, 0, 0,         400, 12,0,0,0, 0,0,0, 0,0,0, 0 },  /* Bigger Bombs: splash 12 */
+            { 0,  6,   8, -20,  0, 0, 0,         500,  0,0,0,0, 0,0,0, 0,0,0, 0 },  /* Missile: faster, longer range */
+            { 8,  0,   0,   0,  0, 0, 0,         800,  0,0,0,0, 0,0,5, 0,0,0, 0 },  /* MOAB Mauler: 5x */
+            { 20, 0,   0, -15,  0, 0, 0,        3200,  0,0,0,0, 0,0,10, 0,0,0, 0 }, /* MOAB Assassin: 10x */
         },
         /* Path 1: Frag Bombs -> Cluster Bombs -> Bloon Impact -> MOAB Elim */
         {
-            { 1,  2,   0,   0,  0, 0, DMG_NORMAL, 300 },  /* Frag: pops Black */
-            { 0,  4,   0,   0,  0, 0, 0,         600 },
-            { 1,  0,   0,   0,  0, 0, 0,        2500 },
-            { 15, 0,   0,   0,  0, 0, 0,       10000 },
+            { 1,  2,   0,   0,  0, 0, DMG_NORMAL, 300,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  4,   0,   0,  0, 0, 0,         600,  6,0,0,0, 0,0,0, 0,0,0, 0 },  /* Cluster: splash +6 */
+            { 1,  0,   0,   0,  0, 0, 0,        2500,  0,0,15,0, 0,0,0, 0,0,0, 0 }, /* Bloon Impact: stun 15 */
+            { 15, 0,   0,   0,  0, 0, 0,       10000,  0,0,0,0, 0,0,8, 0,0,0, 0 },  /* MOAB Elim: 8x */
         },
     },
     /* ── Boomerang Thrower ───────────────────────────────────────────── */
     [TOWER_BOOMERANG] = {
         /* Path 0: Multi-Target -> Glaive Thrower -> Glaive Ricochet -> Glaive Lord */
         {
-            { 0,  3,   0,   0,  0, 0, 0,         200 },
-            { 0,  2,   6,   0,  0, 0, 0,         350 },
-            { 1,  6,   0, -15,  0, 0, 0,        1600 },
-            { 3,  8,   0, -20,  0, 0, 0,        5000 },
+            { 0,  3,   0,   0,  0, 0, 0,         200,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  2,   6,   0,  0, 0, 0,         350,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  6,   0, -15,  0, 0, 0,        1600,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 3,  8,   0, -20,  0, 0, 0,        5000,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
         /* Path 1: Sonic Boom -> Red Hot Rangs -> Bionic Boomer -> Turbo Charge */
         {
-            { 0,  0,   0,   0,  0, 0, DMG_NORMAL, 250 },  /* Sonic: pops Lead/Frozen */
-            { 1,  0,   0,   0,  0, 0, 0,         300 },
-            { 0,  0,   0, -35,  0, 0, 0,        1600 },
-            { 2,  2,   0, -30,  0, 0, 0,        3200 },
+            { 0,  0,   0,   0,  0, 0, DMG_NORMAL, 250,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  0,   0,   0,  0, 0, 0,         300,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0, -35,  0, 0, 0,        1600,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 2,  2,   0, -30,  0, 0, 0,        3200,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
     },
     /* ── Ninja Monkey ────────────────────────────────────────────────── */
     [TOWER_NINJA] = {
         /* Path 0: Ninja Discipline -> Sharp Shurikens -> Double Shot -> Bloonjitsu */
         {
-            { 0,  0,   8, -10,  0, 0, 0,         300 },
-            { 0,  2,   0,   0,  0, 0, 0,         350 },
-            { 0,  0,   0,   0,  1, 0, 0,         750 },
-            { 1,  2,   0,   0,  2, 0, 0,        2750 },
+            { 0,  0,   8, -10,  0, 0, 0,         300,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  2,   0,   0,  0, 0, 0,         350,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0,   0,  1, 0, 0,         750,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  2,   0,   0,  2, 0, 0,        2750,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
-        /* Path 1: Seeking Shuriken -> Distraction -> Counter-Espionage -> Sabotage Supply Lines */
+        /* Path 1: Seeking Shuriken -> Distraction -> Counter-Espionage -> Sabotage */
         {
-            { 0,  0,   0,   0,  0, 0, 0,         250 },  /* homing (no stat delta) */
-            { 0,  0,   0,   0,  0, 0, 0,         350 },  /* distraction (no stat delta) */
-            { 0,  0,   0,   0,  0, 0, 0,         700 },  /* Counter-Esp (no stat delta) */
-            { 0,  0,   0,   0,  0, 0, 0,        5000 },  /* Sabotage (ability, no stat) */
+            { 0,  0,   0,   0,  0, 0, 0,         250,  0,1,0,0, 0,0,0, 0,0,0, 0 },  /* Seeking: homing */
+            { 0,  0,   0,   0,  0, 0, 0,         350,  0,0,0,0, 0,0,0, 0,1,0, 0 },  /* Distraction */
+            { 0,  0,   0,   0,  0, 0, 0,         700,  0,0,20,0, 0,0,0, 0,0,0, 0 }, /* Counter-Esp: stun 20 */
+            { 0,  0,   0,   0,  0, 0, 0,        5000,  0,0,0,0, 0,0,0, 0,0,0, 0 },  /* Sabotage */
         },
     },
     /* ── Ice Tower ───────────────────────────────────────────────────── */
     [TOWER_ICE] = {
         /* Path 0: Enhanced Freeze -> Snap Freeze -> Arctic Wind -> Viral Frost */
         {
-            { 0,  0,   0, -15,  0, 0, 0,         200 },
-            { 1,  0,   0,   0,  0, 0, 0,         350 },  /* 1 dmg on freeze */
-            { 0, 20,  10,   0,  0, 0, 0,        1800 },
-            { 0,  0,   0,   0,  0, 0, 0,        2500 },  /* viral (ability) */
+            { 0,  0,   0, -15,  0, 0, 0,         200,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 1,  0,   0,   0,  0, 0, 0,         350,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0, 20,  10,   0,  0, 0, 0,        1800,  0,0,0,1, 0,0,0, 0,0,0, 0 },  /* Arctic Wind: aura */
+            { 0,  0,   0,   0,  0, 0, 0,        2500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
         /* Path 1: Permafrost -> Cold Snap -> Ice Shards -> Absolute Zero */
         {
-            { 0,  0,   0,   0,  0, 0, 0,         100 },  /* longer freeze (no stat) */
-            { 0,  0,   8,   0,  0, 0, 0,         225 },
-            { 0,  0,   0,   0,  0, 0, 0,        1500 },  /* ice shards (ability) */
-            { 0, 40,   0, -20,  0, 0, 0,        3500 },
+            { 0,  0,   0,   0,  0, 0, 0,         100,  0,0,0,0, 0,0,0, 1,0,0, 0 },  /* Permafrost */
+            { 0,  0,   8,   0,  0, 0, 0,         225,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0,   0,  0, 0, 0,        1500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0, 40,   0, -20,  0, 0, 0,        3500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
     },
     /* ── Glue Gunner ─────────────────────────────────────────────────── */
     [TOWER_GLUE] = {
         /* Path 0: Glue Soak -> Corrosive Glue -> Bloon Dissolver -> Bloon Liquifier */
         {
-            { 0,  0,   0,   0,  0, 0, 0,         200 },  /* soak (all layers) */
-            { 1,  0,   0,   0,  0, 0, 0,         300 },  /* corrosive: 1 dmg/3s */
-            { 2,  0,   0,   0,  0, 0, 0,        2500 },  /* dissolve */
-            { 4,  0,   0,   0,  0, 0, 0,        5000 },  /* liquify */
+            { 0,  0,   0,   0,  0, 0, 0,         200,  0,0,0,0, 0, 0,0, 0,0,1, 0 },   /* Glue Soak */
+            { 0,  0,   0,   0,  0, 0, 0,         300,  0,0,0,0, 1,30,0, 0,0,0, 0 },   /* Corrosive: 1 dmg/30f */
+            { 0,  0,   0,   0,  0, 0, 0,        2500,  0,0,0,0, 1,-15,0, 0,0,0, 0 },  /* Dissolver: 2dmg/15f */
+            { 0,  0,   0,   0,  0, 0, 0,        5000,  0,0,0,0, 2,-10,0, 0,0,0, 0 },  /* Liquifier: 4dmg/5f */
         },
         /* Path 1: Stickier Glue -> Glue Splatter -> Glue Hose -> Glue Striker */
         {
-            { 0,  0,   0,   0,  0, 0, 0,         120 },  /* longer slow */
-            { 0,  2,   0,   0,  0, 0, 0,         400 },  /* splatter: +2 pierce */
-            { 0,  0,   0, -50,  0, 0, 0,        3000 },  /* hose: much faster */
-            { 0,  3,   6, -20,  0, 0, 0,        4500 },  /* striker */
+            { 0,  0,   0,   0,  0, 0, 0,         120,  0,0,0,0, 0,0,0, 0,0,0, 45 },  /* Stickier: +45f slow */
+            { 0,  2,   0,   0,  0, 0, 0,         400,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  0,   0, -50,  0, 0, 0,        3000,  0,0,0,0, 0,0,0, 0,0,0, 0 },
+            { 0,  3,   6, -20,  0, 0, 0,        4500,  0,0,0,0, 0,0,0, 0,0,0, 0 },
         },
     },
 };

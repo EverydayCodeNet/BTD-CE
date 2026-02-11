@@ -28,6 +28,7 @@
 // our code
 #include "angle_lut.h"
 #include "bloons.h"
+#include "freeplay.h"
 #include "list.h"
 #include "path.h"
 #include "save.h"
@@ -49,6 +50,8 @@
 #define SPEED_BTN_Y (SCREEN_HEIGHT - 10 - 32)
 #define SPEED_BTN_W 32
 #define SPEED_BTN_H 32
+
+#define SP_CELL_SIZE 40  /* spatial partition cell size (bigger = fewer boundary misses) */
 
 gfx_sprite_t* bloon_sprite_table[NUM_BLOON_TYPES];
 gfx_sprite_t* tower_sprite_table[NUM_TOWER_TYPES];
@@ -81,6 +84,19 @@ void apply_upgrades(tower_t* tower) {
     tower->projectile_speed = base->projectile_speed;
     tower->sprite = tower_sprite_table[tower->type];
 
+    /* Reset ability fields */
+    tower->splash_radius = (tower->type == TOWER_BOMB) ? 8 : 0;  /* bombs always explode */
+    tower->is_homing = 0;
+    tower->stun_on_hit = 0;
+    tower->has_aura = 0;
+    tower->dot_damage = 0;
+    tower->dot_interval = 0;
+    tower->slow_duration = SLOW_DURATION;
+    tower->moab_damage_mult = 1;
+    tower->permafrost = 0;
+    tower->distraction = 0;
+    tower->glue_soak = 0;
+
     int atk_pct_mod = 0;  /* cumulative attack speed % modifier */
 
     /* Apply upgrades from both paths */
@@ -94,6 +110,19 @@ void apply_upgrades(tower_t* tower) {
             tower->projectile_count += upg->delta_proj_count;
             if (upg->grants_camo) tower->can_see_camo = 1;
             if (upg->damage_type_override) tower->damage_type = upg->damage_type_override;
+
+            /* Ability fields */
+            tower->splash_radius += upg->delta_splash;
+            if (upg->grants_homing) tower->is_homing = 1;
+            if (upg->grants_stun > tower->stun_on_hit) tower->stun_on_hit = upg->grants_stun;
+            if (upg->grants_aura) tower->has_aura = 1;
+            tower->dot_damage += upg->delta_dot_damage;
+            tower->dot_interval = (int8_t)tower->dot_interval + upg->delta_dot_interval;
+            if (upg->moab_mult > tower->moab_damage_mult) tower->moab_damage_mult = upg->moab_mult;
+            if (upg->grants_permafrost) tower->permafrost = 1;
+            if (upg->grants_distraction) tower->distraction = 1;
+            if (upg->grants_glue_soak) tower->glue_soak = 1;
+            tower->slow_duration += upg->delta_slow_duration;
         }
     }
 
@@ -130,7 +159,10 @@ position_t predict_bloon_position(bloon_t* bloon, path_t* path) {
 
 bloon_t* find_target_bloon(game_t* game, tower_t* tower) {
     bloon_t* target = NULL;
-    int best_dist_sq = (int)tower->range * (int)tower->range;
+    int range_sq = (int)tower->range * (int)tower->range;
+    int best_val = 0;
+    int best_dist_sq = 0;
+    bool have_target = false;
 
     list_ele_t* curr_box = game->bloons->inited_boxes->head;
     while (curr_box != NULL) {
@@ -148,9 +180,50 @@ bloon_t* find_target_bloon(game_t* game, tower_t* tower) {
             int dy = bloon->position.y - tower->position.y;
             int dist_sq = dx * dx + dy * dy;
 
-            if (dist_sq <= best_dist_sq) {
-                target = bloon;
-                best_dist_sq = dist_sq;
+            if (dist_sq <= range_sq) {
+                bool better = false;
+                switch (tower->target_mode) {
+                    case TARGET_FIRST: {
+                        /* Furthest along path (highest segment, then highest progress) */
+                        int val = (int)bloon->segment * 1000 + (int)(bloon->progress >> 4);
+                        if (!have_target || val > best_val) {
+                            best_val = val;
+                            better = true;
+                        }
+                        break;
+                    }
+                    case TARGET_LAST: {
+                        /* Least along path */
+                        int val = (int)bloon->segment * 1000 + (int)(bloon->progress >> 4);
+                        if (!have_target || val < best_val) {
+                            best_val = val;
+                            better = true;
+                        }
+                        break;
+                    }
+                    case TARGET_STRONG: {
+                        /* Highest RBE in range */
+                        int val = (int)BLOON_DATA[bloon->type].rbe;
+                        if (!have_target || val > best_val) {
+                            best_val = val;
+                            better = true;
+                        }
+                        break;
+                    }
+                    case TARGET_CLOSE:
+                    default: {
+                        /* Closest distance to tower */
+                        if (!have_target || dist_sq < best_dist_sq) {
+                            best_dist_sq = dist_sq;
+                            better = true;
+                        }
+                        break;
+                    }
+                }
+                if (better) {
+                    target = bloon;
+                    have_target = true;
+                }
             }
 
             curr_elem = curr_elem->next;
@@ -191,22 +264,20 @@ tower_t* initTower(game_t* game, uint8_t type) {
 
 bloon_t* initBloon(game_t* game, uint8_t type, uint8_t modifiers) {
     bloon_t* bloon = safe_malloc(sizeof(bloon_t), __LINE__);
+    memset(bloon, 0, sizeof(bloon_t));
     bloon->type = type;
     bloon->modifiers = modifiers;
     bloon->hp = BLOON_DATA[type].hp;
     bloon->regrow_max = (modifiers & MOD_REGROW) ? type : 0;
     bloon->regrow_timer = REGROW_INTERVAL;
-    bloon->segment = 0;
-    bloon->progress = 0;
     bloon->position.x = 0 - 16;  // start offscreen
     bloon->position.y = game->path->points[0].y;
-    bloon->freeze_timer = 0;
-    bloon->slow_timer = 0;
     return bloon;
 }
 
 projectile_t* initProjectile(game_t* game, tower_t* tower, uint8_t angle) {
     projectile_t* projectile = safe_malloc(sizeof(projectile_t), __LINE__);
+    memset(projectile, 0, sizeof(projectile_t));
 
     projectile->position.x = tower->position.x;
     projectile->position.y = tower->position.y;
@@ -218,6 +289,15 @@ projectile_t* initProjectile(game_t* game, tower_t* tower, uint8_t angle) {
     projectile->angle = angle;
     projectile->lifetime = 120;  /* ~2 seconds at 60fps, despawn after */
     projectile->owner = (void*)tower;
+
+    /* Carry ability fields from tower */
+    projectile->splash_radius = tower->splash_radius;
+    projectile->is_homing = tower->is_homing;
+    projectile->stun_duration = tower->stun_on_hit;
+    projectile->can_see_camo = tower->can_see_camo;
+    projectile->dot_damage = tower->dot_damage;
+    projectile->dot_interval = tower->dot_interval;
+    projectile->glue_soak = tower->glue_soak;
 
     (void)game;
     return projectile;
@@ -291,12 +371,26 @@ void handlePlayingKeys(game_t* game) {
         return;
     }
 
+    /* 2nd key: start round / toggle fast forward */
+    if (kb_Data[1] & kb_2nd) {
+        if (!game->round_active) {
+            game->round_active = true;
+        } else {
+            game->fast_forward = !game->fast_forward;
+        }
+        game->key_delay = KEY_DELAY;
+    }
+
     /* Enter key */
     if (kb_Data[6] & kb_Enter) {
-        /* Check speed button first */
+        /* Check speed/start button (cursor click) */
         if (game->cursor.x >= SPEED_BTN_X && game->cursor.x < SPEED_BTN_X + SPEED_BTN_W &&
             game->cursor.y >= SPEED_BTN_Y && game->cursor.y < SPEED_BTN_Y + SPEED_BTN_H) {
-            game->fast_forward = !game->fast_forward;
+            if (!game->round_active) {
+                game->round_active = true;
+            } else {
+                game->fast_forward = !game->fast_forward;
+            }
             game->key_delay = KEY_DELAY;
         } else if (game->cursor_type == CURSOR_SELECTED) {
             /* Try to place tower (cursor = center of tower) */
@@ -345,8 +439,26 @@ void handlePlayingKeys(game_t* game) {
         game->key_delay = KEY_DELAY;
     }
 
-    /* Mode key: toggle sandbox */
+    /* Mode key: cycle target mode on hovered tower */
     if (kb_Data[1] & kb_Mode) {
+        list_ele_t* curr = game->towers->head;
+        while (curr != NULL) {
+            tower_t* t = (tower_t*)(curr->value);
+            int half = t->sprite->width / 2;
+            if (game->cursor.x >= t->position.x - half &&
+                game->cursor.x < t->position.x + half &&
+                game->cursor.y >= t->position.y - half &&
+                game->cursor.y < t->position.y + half) {
+                t->target_mode = (t->target_mode + 1) % 4;
+                break;
+            }
+            curr = curr->next;
+        }
+        game->key_delay = KEY_DELAY;
+    }
+
+    /* Trace key: toggle sandbox */
+    if (kb_Data[1] & kb_Trace) {
         game->SANDBOX = !game->SANDBOX;
         game->key_delay = KEY_DELAY;
     }
@@ -453,6 +565,31 @@ void handleUpgradeScreen(game_t* game) {
         game->key_delay = KEY_DELAY;
     }
 
+    /* Mode key: cycle target mode in upgrade screen */
+    if (kb_Data[1] & kb_Mode) {
+        tower->target_mode = (tower->target_mode + 1) % 4;
+        game->key_delay = KEY_DELAY;
+    }
+
+    /* − key: sell tower */
+    if (kb_Data[6] & kb_Sub) {
+        uint16_t refund = (tower->total_invested * 80) / 100;
+        if (!game->SANDBOX) game->coins += refund;
+        /* Remove tower from the towers list */
+        list_ele_t* curr = game->towers->head;
+        while (curr != NULL) {
+            if ((tower_t*)(curr->value) == tower) {
+                remove_and_delete(game->towers, curr, free);
+                break;
+            }
+            curr = curr->next;
+        }
+        game->selected_tower = NULL;
+        game->screen = SCREEN_PLAYING;
+        game->key_delay = KEY_DELAY;
+        return;
+    }
+
     /* Del or Clear: back to playing */
     if ((kb_Data[1] & kb_Del) || (kb_Data[6] & kb_Clear)) {
         game->selected_tower = NULL;
@@ -499,8 +636,14 @@ void drawHUD(game_t* game) {
     gfx_PrintStringXY("HP:", 4, 3);
     gfx_PrintInt(game->hearts, 1);
 
-    gfx_PrintStringXY("Round:", 80, 3);
+    gfx_PrintStringXY("Round: ", 80, 3);
     gfx_PrintInt(game->round + 1, 1);
+    gfx_PrintChar('/');
+    if (game->freeplay) {
+        gfx_PrintString("FP");
+    } else {
+        gfx_PrintInt(game->max_round + 1, 1);
+    }
 
     gfx_PrintStringXY("$", 180, 3);
     gfx_PrintInt(game->coins, 1);
@@ -547,21 +690,36 @@ void drawSpeedButton(game_t* game) {
                   game->cursor.y >= SPEED_BTN_Y &&
                   game->cursor.y < SPEED_BTN_Y + SPEED_BTN_H);
 
-    /* Background */
+    if (!game->round_active) {
+        /* Start button: red background */
+        gfx_SetColor(133);
+        gfx_FillRectangle(SPEED_BTN_X, SPEED_BTN_Y, SPEED_BTN_W, SPEED_BTN_H);
+        gfx_SetColor(hover ? 255 : 200);
+        gfx_Rectangle(SPEED_BTN_X, SPEED_BTN_Y, SPEED_BTN_W, SPEED_BTN_H);
+        gfx_SetTextScale(2, 2);
+        gfx_SetTextFGColor(hover ? 255 : 200);
+        gfx_PrintStringXY(">", SPEED_BTN_X + 10, SPEED_BTN_Y + 8);
+        gfx_SetTextScale(1, 1);
+        /* "[2nd]" label centered above the button */
+        gfx_SetTextFGColor(255);
+        int lbl_w = gfx_GetStringWidth("[2nd]");
+        gfx_PrintStringXY("[2nd]", SPEED_BTN_X + (SPEED_BTN_W - lbl_w) / 2, SPEED_BTN_Y - 12);
+        return;
+    }
+
+    /* Speed button (round is active) */
     gfx_SetColor(game->fast_forward ? 40 : 8);
     gfx_FillRectangle(SPEED_BTN_X, SPEED_BTN_Y, SPEED_BTN_W, SPEED_BTN_H);
 
-    /* Border: white when toggled, gold on hover, gray default */
     if (game->fast_forward) {
-        gfx_SetColor(255);  /* white = active */
+        gfx_SetColor(255);
     } else if (hover) {
-        gfx_SetColor(148);  /* bright gold = hover */
+        gfx_SetColor(148);
     } else {
-        gfx_SetColor(80);   /* dim = default */
+        gfx_SetColor(80);
     }
     gfx_Rectangle(SPEED_BTN_X, SPEED_BTN_Y, SPEED_BTN_W, SPEED_BTN_H);
 
-    /* Text: ">>" when fast, ">" when normal */
     gfx_SetTextScale(2, 2);
     gfx_SetTextFGColor(game->fast_forward ? 255 : (hover ? 148 : 80));
     if (game->fast_forward) {
@@ -569,7 +727,7 @@ void drawSpeedButton(game_t* game) {
     } else {
         gfx_PrintStringXY(">", SPEED_BTN_X + 10, SPEED_BTN_Y + 8);
     }
-    gfx_SetTextScale(1, 1);  /* reset to normal */
+    gfx_SetTextScale(1, 1);
 }
 
 void drawStats(game_t* game) {
@@ -577,28 +735,38 @@ void drawStats(game_t* game) {
 }
 
 void drawTowers(game_t* game) {
+    static const char TARGET_CHARS[] = "FLSC";
     list_ele_t* curr_elem = game->towers->head;
     while (curr_elem != NULL) {
         tower_t* tower = (tower_t*)(curr_elem->value);
         int half = tower->sprite->width / 2;
 
         if (tower->type == TOWER_TACK || tower->type == TOWER_ICE) {
-            /* Radial/area towers: don't rotate, looks weird */
             gfx_TransparentSprite(tower->sprite,
                                    tower->position.x - half,
                                    tower->position.y - half);
         } else {
-            /* Use projectile native angle: same offset that makes projectiles correct.
-             * Most tower sprites face similar direction to their projectile sprite. */
             uint8_t rot = (uint8_t)(tower->facing_angle - proj_native_angle[tower->type]);
             gfx_RotatedScaledTransparentSprite(
                 tower->sprite,
                 tower->position.x - half,
                 tower->position.y - half,
                 rot,
-                64  /* 100% scale */
+                64
             );
         }
+
+        /* Show target mode letter if cursor hovers this tower */
+        if (game->cursor.x >= tower->position.x - half &&
+            game->cursor.x < tower->position.x + half &&
+            game->cursor.y >= tower->position.y - half &&
+            game->cursor.y < tower->position.y + half) {
+            gfx_SetTextFGColor(148);
+            char buf[2] = { TARGET_CHARS[tower->target_mode], '\0' };
+            gfx_PrintStringXY(buf, tower->position.x - 3,
+                               tower->position.y - half - 10);
+        }
+
         curr_elem = curr_elem->next;
     }
 }
@@ -630,6 +798,12 @@ void drawBloons(game_t* game) {
             /* Freeze indicator: blue border */
             if (bloon->freeze_timer > 0) {
                 gfx_SetColor(0x5F);
+                gfx_Rectangle(draw_x - 1, draw_y - 1,
+                              spr->width + 2, spr->height + 2);
+            }
+            /* Stun indicator: yellow border */
+            if (bloon->stun_timer > 0) {
+                gfx_SetColor(148);
                 gfx_Rectangle(draw_x - 1, draw_y - 1,
                               spr->width + 2, spr->height + 2);
             }
@@ -846,7 +1020,16 @@ void drawUpgradeScreen(game_t* game) {
     gfx_PrintStringXY("Sell:$", 4, SCREEN_HEIGHT - 12);
     gfx_SetTextXY(52, SCREEN_HEIGHT - 12);
     gfx_PrintInt((tower->total_invested * 80) / 100, 1);
-    gfx_PrintStringXY("[Enter]Buy [Del]Back", 140, SCREEN_HEIGHT - 12);
+    gfx_PrintStringXY("[-]Sell [Enter]Buy [Del]Back", 110, SCREEN_HEIGHT - 12);
+
+    /* Target mode display */
+    {
+        static const char* TARGET_LABELS[] = {"FIRST","LAST","STRONG","CLOSE"};
+        gfx_SetTextFGColor(148);
+        const char* label = TARGET_LABELS[tower->target_mode];
+        int lw = gfx_GetStringWidth(label);
+        gfx_PrintStringXY(label, SCREEN_WIDTH - lw - 4, 18);
+    }
 }
 
 /* ── Bloon Movement ──────────────────────────────────────────────────── */
@@ -858,6 +1041,11 @@ int moveBloon(game_t* game, bloon_t* bloon) {
     /* Frozen bloons don't move */
     if (bloon->freeze_timer > 0) {
         bloon->freeze_timer--;
+        /* Permafrost: apply slow when freeze wears off */
+        if (bloon->freeze_timer == 0 && bloon->frozen_by_permafrost) {
+            bloon->slow_timer = SLOW_DURATION;
+            bloon->frozen_by_permafrost = 0;
+        }
         return bloon->segment;
     }
 
@@ -900,34 +1088,59 @@ void popBloon(game_t* game, bloon_t* bloon, position_t pos) {
     const bloon_data_t* data = &BLOON_DATA[bloon->type];
     game->coins += 1;
 
+    /* Glue soak: children inherit slow and DoT if parent was glued with soak */
+    uint8_t inherit_slow = 0;
+    uint8_t inherit_dot_damage = 0;
+    uint8_t inherit_dot_interval = 0;
+    if (bloon->slow_timer > 0) {
+        /* Check if any glue tower that could have hit this has glue_soak */
+        inherit_slow = bloon->slow_timer;
+        inherit_dot_damage = bloon->dot_damage;
+        inherit_dot_interval = bloon->dot_interval;
+    }
+
     for (int i = 0; i < data->child_count; i++) {
         bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
+        memset(child, 0, sizeof(bloon_t));
         child->type = data->child_type;
         child->modifiers = bloon->modifiers;
         child->hp = BLOON_DATA[data->child_type].hp;
         child->regrow_max = bloon->regrow_max;
         child->regrow_timer = REGROW_INTERVAL;
         child->segment = bloon->segment;
-        child->progress = 0;
         child->position = pos;
-        child->freeze_timer = 0;
-        child->slow_timer = 0;
+        if (inherit_slow > 0) {
+            child->slow_timer = inherit_slow;
+            child->dot_damage = inherit_dot_damage;
+            child->dot_interval = inherit_dot_interval;
+            if (inherit_dot_damage > 0) {
+                child->dot_tick = inherit_dot_interval;
+                child->dot_timer = 180;
+            }
+        }
         sp_insert(game->bloons, child->position, child);
     }
 
     if (data->child_type2 != 0xFF) {
         for (int i = 0; i < data->child_count2; i++) {
             bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
+            memset(child, 0, sizeof(bloon_t));
             child->type = data->child_type2;
             child->modifiers = bloon->modifiers;
             child->hp = BLOON_DATA[data->child_type2].hp;
             child->regrow_max = bloon->regrow_max;
             child->regrow_timer = REGROW_INTERVAL;
             child->segment = bloon->segment;
-            child->progress = 0;
             child->position = pos;
-            child->freeze_timer = 0;
-            child->slow_timer = 0;
+            if (inherit_slow > 0) {
+                child->slow_timer = inherit_slow;
+                child->dot_damage = inherit_dot_damage;
+                child->dot_interval = inherit_dot_interval;
+                if (inherit_dot_damage > 0) {
+                    child->dot_tick = inherit_dot_interval;
+                    child->dot_timer = 180;
+                }
+            }
             sp_insert(game->bloons, child->position, child);
         }
     }
@@ -939,8 +1152,9 @@ void spawnBloons(game_t* game) {
     round_state_t* rs = &game->round_state;
     if (rs->complete) return;
 
-    const round_def_t* rd = &ROUND_DEFS[game->round];
-    const round_group_t* group = &rd->groups[rs->group_index];
+    uint8_t num_groups;
+    const round_group_t* groups = get_round_groups(game->round, &num_groups);
+    const round_group_t* group = &groups[rs->group_index];
 
     if (rs->spacing_timer > 0) {
         rs->spacing_timer--;
@@ -955,7 +1169,7 @@ void spawnBloons(game_t* game) {
     if (rs->spawned >= group->count) {
         rs->group_index++;
         rs->spawned = 0;
-        if (rs->group_index >= rd->num_groups) {
+        if (rs->group_index >= num_groups) {
             rs->complete = true;
         }
     }
@@ -976,15 +1190,25 @@ void updateBloons(game_t* game) {
         list_ele_t* tmp;
         while (curr_elem != NULL) {
             bloon_t* curr_bloon = (bloon_t*)(curr_elem->value);
-            position_t pos_before_move = curr_bloon->position;
-            int segBeforeMove = curr_bloon->segment;
-            if (segBeforeMove >= num_segments ||
-                moveBloon(game, curr_bloon) >= num_segments) {
-                game->hearts -= BLOON_DATA[curr_bloon->type].rbe;
-                tmp = curr_elem->next;
-                sp_remove(game->bloons, pos_before_move, curr_elem, free);
-                curr_elem = tmp;
-                continue;
+
+            /* Stun: bloon can't move (like freeze but from bomb/ninja) */
+            if (curr_bloon->stun_timer > 0) {
+                curr_bloon->stun_timer--;
+                /* Still process DoT while stunned */
+                goto do_dot;
+            }
+
+            {
+                position_t pos_before_move = curr_bloon->position;
+                int segBeforeMove = curr_bloon->segment;
+                if (segBeforeMove >= num_segments ||
+                    moveBloon(game, curr_bloon) >= num_segments) {
+                    game->hearts -= BLOON_DATA[curr_bloon->type].rbe;
+                    tmp = curr_elem->next;
+                    sp_remove(game->bloons, pos_before_move, curr_elem, free);
+                    curr_elem = tmp;
+                    continue;
+                }
             }
 
             /* Regrow mechanic */
@@ -997,6 +1221,17 @@ void updateBloons(game_t* game) {
                         curr_bloon->regrow_timer = REGROW_INTERVAL;
                     }
                 }
+            }
+
+do_dot:
+            /* Damage-over-time (corrosive glue line) */
+            if (curr_bloon->dot_timer > 0) {
+                curr_bloon->dot_tick--;
+                if (curr_bloon->dot_tick == 0) {
+                    curr_bloon->hp -= curr_bloon->dot_damage;
+                    curr_bloon->dot_tick = curr_bloon->dot_interval;
+                }
+                curr_bloon->dot_timer--;
             }
 
             curr_elem = curr_elem->next;
@@ -1025,6 +1260,30 @@ void updateTowers(game_t* game) {
     while (curr_elem != NULL) {
         tower_t* tower = (tower_t*)(curr_elem->value);
         tower->tick++;
+
+        /* Arctic Wind aura: slow bloons in range every frame */
+        if (tower->has_aura) {
+            int range_sq = (int)tower->range * (int)tower->range;
+            list_ele_t* bx = game->bloons->inited_boxes->head;
+            while (bx != NULL) {
+                list_ele_t* be = ((queue_t*)(bx->value))->head;
+                while (be != NULL) {
+                    bloon_t* bloon = (bloon_t*)(be->value);
+                    if ((bloon->modifiers & MOD_CAMO) && !tower->can_see_camo) {
+                        be = be->next;
+                        continue;
+                    }
+                    int dx = bloon->position.x - tower->position.x;
+                    int dy = bloon->position.y - tower->position.y;
+                    if (dx * dx + dy * dy <= range_sq) {
+                        if (bloon->slow_timer < SLOW_DURATION)
+                            bloon->slow_timer = SLOW_DURATION;
+                    }
+                    be = be->next;
+                }
+                bx = bx->next;
+            }
+        }
 
         if (tower->tick >= tower->cooldown) {
             tower->tick = 0;
@@ -1058,6 +1317,7 @@ void updateTowers(game_t* game) {
                         int dy = bloon->position.y - tower->position.y;
                         if (dx * dx + dy * dy <= range_sq && hit_count < tower->pierce) {
                             bloon->freeze_timer = FREEZE_DURATION;
+                            if (tower->permafrost) bloon->frozen_by_permafrost = 1;
                             if (tower->damage > 0) {
                                 bloon->hp -= tower->damage;
                                 tower->pop_count++;
@@ -1076,8 +1336,15 @@ void updateTowers(game_t* game) {
                     /* Check immunity */
                     if (!(BLOON_DATA[target->type].immunities & tower->damage_type) ||
                         tower->damage_type == DMG_NORMAL) {
-                        target->hp -= tower->damage;
-                        tower->pop_count += tower->damage;
+                        uint8_t dmg = tower->damage;
+                        if (target->type == BLOON_MOAB && tower->moab_damage_mult > 1) {
+                            dmg = dmg * tower->moab_damage_mult;
+                        }
+                        target->hp -= dmg;
+                        tower->pop_count += dmg;
+                        if (tower->stun_on_hit > 0) {
+                            target->stun_timer = tower->stun_on_hit;
+                        }
                     }
                 }
             } else if (tower->type == TOWER_GLUE) {
@@ -1134,6 +1401,52 @@ void updateProjectiles(game_t* game) {
             }
             proj->lifetime--;
 
+            /* Homing: adjust angle toward nearest bloon (3x3 cell search) */
+            if (proj->is_homing) {
+                int best_dist = 60 * 60;
+                bloon_t* seek_target = NULL;
+                multi_list_t* ml = game->bloons;
+                int bs = (int)ml->box_size;
+                int cx = proj->position.x / bs;
+                int cy = proj->position.y / bs;
+                for (int ddy = -1; ddy <= 1; ddy++) {
+                    int ry = cy + ddy;
+                    if (ry < 0 || ry >= (int)ml->height) continue;
+                    for (int ddx = -1; ddx <= 1; ddx++) {
+                        int rx = cx + ddx;
+                        if (rx < 0 || rx >= (int)ml->width) continue;
+                        queue_t* box = ml->boxes[ry * (int)ml->width + rx];
+                        if (box == NULL) continue;
+                        list_ele_t* be = box->head;
+                        while (be != NULL) {
+                            bloon_t* b = (bloon_t*)(be->value);
+                            /* Skip camo if can't see */
+                            if ((b->modifiers & MOD_CAMO) && !proj->can_see_camo) {
+                                be = be->next; continue;
+                            }
+                            /* Skip immune bloons */
+                            if (proj->damage_type != DMG_NORMAL &&
+                                (BLOON_DATA[b->type].immunities & proj->damage_type)) {
+                                be = be->next; continue;
+                            }
+                            int dx = b->position.x - proj->position.x;
+                            int dy = b->position.y - proj->position.y;
+                            int d2 = dx * dx + dy * dy;
+                            if (d2 < best_dist) {
+                                best_dist = d2;
+                                seek_target = b;
+                            }
+                            be = be->next;
+                        }
+                    }
+                }
+                if (seek_target) {
+                    uint8_t desired = iatan2(seek_target->position.y - proj->position.y,
+                                             seek_target->position.x - proj->position.x);
+                    proj->angle = desired;  /* snap to target — no wiggle */
+                }
+            }
+
             /* Integer movement using LUT */
             proj->position.x += (int16_t)((cos_lut[proj->angle] * (int16_t)proj->speed) >> 8);
             proj->position.y += (int16_t)((sin_lut[proj->angle] * (int16_t)proj->speed) >> 8);
@@ -1156,6 +1469,61 @@ void updateProjectiles(game_t* game) {
             curr_elem = next_elem;
         }
         curr_box = curr_box->next;
+    }
+}
+
+/* Splash damage helper: only checks 3x3 neighborhood of spatial cells.
+ * Does NOT pop bloons — just applies damage. checkHitscanPops handles pops
+ * afterward, avoiding cascading child spawns during iteration. */
+void applySplashDamage(game_t* game, projectile_t* proj, bloon_t* direct_hit) {
+    int sr = (int)proj->splash_radius;
+    int sr_sq = sr * sr;
+    int splash_hits = 0;
+    int max_hits = proj->pierce > 6 ? 6 : proj->pierce;  /* cap splash targets */
+    multi_list_t* ml = game->bloons;
+    int bs = (int)ml->box_size;
+
+    /* Compute center cell */
+    int cx = proj->position.x / bs;
+    int cy = proj->position.y / bs;
+
+    /* Check 3x3 neighborhood */
+    for (int dy = -1; dy <= 1 && splash_hits < max_hits; dy++) {
+        int ry = cy + dy;
+        if (ry < 0 || ry >= (int)ml->height) continue;
+        for (int dx = -1; dx <= 1 && splash_hits < max_hits; dx++) {
+            int rx = cx + dx;
+            if (rx < 0 || rx >= (int)ml->width) continue;
+            queue_t* box = ml->boxes[ry * (int)ml->width + rx];
+            if (box == NULL) continue;
+            list_ele_t* sbe = box->head;
+            while (sbe != NULL && splash_hits < max_hits) {
+                bloon_t* sb = (bloon_t*)(sbe->value);
+                if (sb != direct_hit) {
+                    int sdx = sb->position.x - proj->position.x;
+                    int sdy = sb->position.y - proj->position.y;
+                    if (sdx * sdx + sdy * sdy <= sr_sq) {
+                        if (proj->damage_type != DMG_NORMAL &&
+                            (BLOON_DATA[sb->type].immunities & proj->damage_type)) {
+                            sbe = sbe->next;
+                            continue;
+                        }
+                        uint8_t splash_dmg = proj->damage;
+                        if (proj->owner && sb->type == BLOON_MOAB) {
+                            uint8_t mult = ((tower_t*)proj->owner)->moab_damage_mult;
+                            if (mult > 1) splash_dmg = splash_dmg * mult;
+                        }
+                        sb->hp -= splash_dmg;
+                        if (proj->stun_duration > 0)
+                            sb->stun_timer = proj->stun_duration;
+                        if (proj->owner)
+                            ((tower_t*)proj->owner)->pop_count += splash_dmg;
+                        splash_hits++;
+                    }
+                }
+                sbe = sbe->next;
+            }
+        }
     }
 }
 
@@ -1203,34 +1571,81 @@ void checkBloonProjCollissions(game_t* game) {
                 if (boxesCollide(bloon_tl, bw, bh, proj_tl, pw, ph)) {
 
                     /* Check immunity: if projectile's damage type is blocked
-                     * by bloon's immunities, skip (unless DMG_NORMAL which bypasses all) */
+                     * by bloon's immunities, skip direct damage but still splash */
                     if (tmp_proj->damage_type != DMG_NORMAL &&
                         (BLOON_DATA[tmp_bloon->type].immunities & tmp_proj->damage_type)) {
+                        /* Splash still detonates on immune targets */
+                        if (tmp_proj->splash_radius > 0) {
+                            applySplashDamage(game, tmp_proj, tmp_bloon);
+                            tmp_proj->pierce--;
+                            if (tmp_proj->pierce <= 0) {
+                                sp_remove(game->projectiles, tmp_proj->position,
+                                          curr_proj_elem, free);
+                            }
+                            break;
+                        }
                         curr_proj_elem = next_proj_elem;
                         continue;
                     }
 
                     /* Glue projectile: pass through already-slowed bloons */
                     if (tmp_proj->damage_type == DMG_NORMAL && tmp_proj->damage == 0 &&
-                        tmp_bloon->slow_timer > 0) {
+                        tmp_proj->dot_damage == 0 && tmp_bloon->slow_timer > 0) {
                         curr_proj_elem = next_proj_elem;
                         continue;
                     }
 
                     /* Glue projectile: apply slow to un-slowed bloons */
                     if (tmp_proj->damage_type == DMG_NORMAL && tmp_proj->damage == 0) {
-                        tmp_bloon->slow_timer = SLOW_DURATION;
+                        uint8_t slow_dur = SLOW_DURATION;
+                        if (tmp_proj->owner) {
+                            slow_dur = ((tower_t*)tmp_proj->owner)->slow_duration;
+                        }
+                        tmp_bloon->slow_timer = slow_dur;
+                    }
+
+                    /* Apply DoT from projectile (corrosive glue) */
+                    if (tmp_proj->dot_damage > 0) {
+                        tmp_bloon->dot_damage = tmp_proj->dot_damage;
+                        tmp_bloon->dot_interval = tmp_proj->dot_interval;
+                        tmp_bloon->dot_tick = tmp_proj->dot_interval;
+                        tmp_bloon->dot_timer = 180;  /* ~3 seconds of DoT */
+                    }
+
+                    /* Apply stun */
+                    if (tmp_proj->stun_duration > 0) {
+                        tmp_bloon->stun_timer = tmp_proj->stun_duration;
+                    }
+
+                    /* Compute effective damage with MOAB multiplier */
+                    uint8_t eff_damage = tmp_proj->damage;
+                    if (tmp_proj->owner && tmp_bloon->type == BLOON_MOAB) {
+                        uint8_t mult = ((tower_t*)tmp_proj->owner)->moab_damage_mult;
+                        if (mult > 1) eff_damage = eff_damage * mult;
                     }
 
                     /* Apply damage + track pops on owner tower */
-                    tmp_bloon->hp -= tmp_proj->damage;
+                    tmp_bloon->hp -= eff_damage;
                     if (tmp_proj->owner != NULL) {
-                        ((tower_t*)tmp_proj->owner)->pop_count += tmp_proj->damage;
+                        ((tower_t*)tmp_proj->owner)->pop_count += eff_damage;
                     }
+
+                    /* Distraction: 25% chance to knock bloon back 1 segment */
+                    if (tmp_proj->owner && ((tower_t*)tmp_proj->owner)->distraction) {
+                        if ((rand() & 3) == 0 && tmp_bloon->segment > 0) {
+                            tmp_bloon->segment--;
+                        }
+                    }
+
                     if (tmp_bloon->hp <= 0) {
                         popBloon(game, tmp_bloon, tmp_bloon->position);
                         sp_remove(game->bloons, tmp_bloon->position,
                                   curr_bloon_elem, free);
+                    }
+
+                    /* Splash damage: damage nearby bloons (3x3 cell neighborhood) */
+                    if (tmp_proj->splash_radius > 0) {
+                        applySplashDamage(game, tmp_proj, tmp_bloon);
                     }
 
                     /* Reduce projectile pierce */
@@ -1277,27 +1692,34 @@ void handleGame(game_t* game) {
 
     if (game->hearts <= 0) {
         delete_save();
-        game->exit = true;
+        game->screen = SCREEN_GAME_OVER;
+        game->key_delay = KEY_DELAY * 3;
         return;
     }
+
+    /* Waiting for player to press Start */
+    if (!game->round_active) return;
 
     /* Check for round completion */
     round_state_t* rs = &game->round_state;
     if (rs->complete && sp_total_size(game->bloons) == 0) {
-        game->coins += 100 + game->round;
+        game->coins += 100 + (int16_t)game->round;
 
         /* Save at end of each round */
         save_game(game);
 
-        if (game->round >= game->max_round) {
+        if (!game->freeplay && game->round >= game->max_round) {
             delete_save();
-            game->exit = true;
+            game->screen = SCREEN_VICTORY;
+            game->key_delay = KEY_DELAY * 3;
             return;
         }
 
         game->round++;
         memset(&game->round_state, 0, sizeof(round_state_t));
         game->round_state.spacing_timer = 1;
+        game->round_active = game->auto_start;  /* auto-start or pause */
+        return;
     }
 
     spawnBloons(game);
@@ -1319,8 +1741,8 @@ game_t* newGame(position_t* points, size_t num_points) {
     game->coins = 650;
 
     game->towers = queue_new();
-    game->bloons = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, 20);
-    game->projectiles = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, 20);
+    game->bloons = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, SP_CELL_SIZE);
+    game->projectiles = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, SP_CELL_SIZE);
 
     game->exit = false;
     game->cursor = (position_t){160, 120};
@@ -1328,15 +1750,21 @@ game_t* newGame(position_t* points, size_t num_points) {
 
     game->round = 0;
     game->max_round = 79;
-    game->round_active = true;
+    game->round_active = false;
     game->round_state.spacing_timer = 1;
 
-    game->screen = SCREEN_PLAYING;
+    game->screen = SCREEN_TITLE;
     game->buy_menu_cursor = 0;
     game->selected_tower = NULL;
     game->selected_tower_type = TOWER_DART;
     game->upgrade_path_sel = 0;
     game->key_delay = 0;
+    game->menu_cursor = 0;
+    game->show_start_menu = true;
+    game->auto_start = true;
+    game->freeplay = false;
+    game->spectate = false;
+    game->difficulty = 1;  /* medium default */
 
     game->AUTOPLAY = false;
     game->SANDBOX = false;
@@ -1353,20 +1781,483 @@ void exitGame(game_t* game) {
     free(game);
 }
 
+/* ── Menu Drawing ─────────────────────────────────────────────────────── */
+
+void drawCenteredString(const char* str, int y) {
+    int w = gfx_GetStringWidth(str);
+    gfx_PrintStringXY(str, (SCREEN_WIDTH - w) / 2, y);
+}
+
+void drawCenteredString2x(const char* str, int y) {
+    gfx_SetTextScale(2, 2);
+    int w = gfx_GetStringWidth(str);
+    gfx_PrintStringXY(str, (SCREEN_WIDTH - w) / 2, y);
+    gfx_SetTextScale(1, 1);
+}
+
+uint16_t compute_total_pops(game_t* game) {
+    uint16_t total = 0;
+    list_ele_t* curr = game->towers->head;
+    while (curr != NULL) {
+        total += ((tower_t*)(curr->value))->pop_count;
+        curr = curr->next;
+    }
+    return total;
+}
+
+uint8_t count_towers(game_t* game) {
+    uint8_t n = 0;
+    list_ele_t* curr = game->towers->head;
+    while (curr != NULL) { n++; curr = curr->next; }
+    return n;
+}
+
+/* ── Game State Reset ─────────────────────────────────────────────────── */
+
+void resetGameState(game_t* game) {
+    queue_free(game->towers, free);
+    game->towers = queue_new();
+    free_partitioned_list(game->bloons, free);
+    game->bloons = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, SP_CELL_SIZE);
+    free_partitioned_list(game->projectiles, free);
+    game->projectiles = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, SP_CELL_SIZE);
+
+    game->round = 0;
+    game->round_active = false;
+    game->freeplay = false;
+    game->spectate = false;
+    game->cursor_type = CURSOR_NONE;
+    game->selected_tower = NULL;
+    game->fast_forward = false;
+    game->hearts = 100;
+    game->coins = 650;
+    memset(&game->round_state, 0, sizeof(round_state_t));
+    game->round_state.spacing_timer = 1;
+}
+
+void clearBloonsAndProjectiles(game_t* game) {
+    free_partitioned_list(game->bloons, free);
+    game->bloons = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, SP_CELL_SIZE);
+    free_partitioned_list(game->projectiles, free);
+    game->projectiles = new_partitioned_list(SCREEN_WIDTH, SCREEN_HEIGHT, SP_CELL_SIZE);
+    game->round_active = false;
+    game->round_state.complete = true;
+}
+
+/* ── Title Screen ─────────────────────────────────────────────────────── */
+
+void handleTitleScreen(game_t* game) {
+    kb_Scan();
+    if (game->key_delay > 0) { game->key_delay--; return; }
+
+    bool has_save = save_exists();
+    /* Resume, New Game, Settings, Quit (or New Game, Settings, Quit) */
+    uint8_t num_items = has_save ? 4 : 3;
+
+    if (kb_Data[7] & kb_Down) {
+        if (game->menu_cursor < num_items - 1) game->menu_cursor++;
+        game->key_delay = KEY_DELAY;
+    }
+    if (kb_Data[7] & kb_Up) {
+        if (game->menu_cursor > 0) game->menu_cursor--;
+        game->key_delay = KEY_DELAY;
+    }
+
+    if (kb_Data[6] & kb_Enter) {
+        uint8_t sel = game->menu_cursor;
+        if (!has_save) sel++;  /* shift indices when no Resume */
+        switch (sel) {
+            case 0: /* Resume */
+                resetGameState(game);
+                load_game(game);
+                game->screen = SCREEN_PLAYING;
+                break;
+            case 1: /* New Game */
+                delete_save();
+                resetGameState(game);
+                game->menu_cursor = 0;
+                game->screen = SCREEN_DIFFICULTY;
+                break;
+            case 2: /* Settings */
+                game->menu_cursor = 0;
+                game->screen = SCREEN_SETTINGS;
+                break;
+            case 3: /* Quit */
+                game->exit = true;
+                break;
+        }
+        game->key_delay = KEY_DELAY;
+        return;
+    }
+
+    if (kb_Data[6] & kb_Clear) {
+        game->exit = true;
+    }
+}
+
+void drawTitleScreen(game_t* game) {
+    gfx_SetColor(0);
+    gfx_FillRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    gfx_SetTextFGColor(148);  /* yellow */
+    drawCenteredString2x("BTD CE", 40);
+
+    bool has_save = save_exists();
+    const char* items[4];
+    uint8_t num_items;
+    if (has_save) {
+        items[0] = "Resume";
+        items[1] = "New Game";
+        items[2] = "Settings";
+        items[3] = "Quit";
+        num_items = 4;
+    } else {
+        items[0] = "New Game";
+        items[1] = "Settings";
+        items[2] = "Quit";
+        num_items = 3;
+    }
+
+    int start_y = 90;
+    for (uint8_t i = 0; i < num_items; i++) {
+        gfx_SetTextFGColor(i == game->menu_cursor ? 148 : 255);
+        drawCenteredString(items[i], start_y + i * 20);
+    }
+
+    /* Copyright */
+    gfx_SetTextFGColor(80);
+    drawCenteredString("Copyright Ninja Kiwi", SCREEN_HEIGHT - 24);
+    drawCenteredString("Adapted by Everyday Code (2026)", SCREEN_HEIGHT - 14);
+}
+
+/* ── Settings Screen ──────────────────────────────────────────────────── */
+
+void handleSettingsScreen(game_t* game) {
+    kb_Scan();
+    if (game->key_delay > 0) { game->key_delay--; return; }
+
+    if (kb_Data[7] & kb_Down) {
+        if (game->menu_cursor < 1) game->menu_cursor++;
+        game->key_delay = KEY_DELAY;
+    }
+    if (kb_Data[7] & kb_Up) {
+        if (game->menu_cursor > 0) game->menu_cursor--;
+        game->key_delay = KEY_DELAY;
+    }
+
+    /* Toggle selected setting */
+    if ((kb_Data[6] & kb_Enter) || (kb_Data[7] & kb_Left) || (kb_Data[7] & kb_Right)) {
+        if (game->menu_cursor == 0) {
+            game->show_start_menu = !game->show_start_menu;
+        } else {
+            game->auto_start = !game->auto_start;
+        }
+        save_settings(game);
+        game->key_delay = KEY_DELAY;
+    }
+
+    if ((kb_Data[1] & kb_Del) || (kb_Data[6] & kb_Clear)) {
+        game->menu_cursor = 0;
+        game->screen = SCREEN_TITLE;
+        game->key_delay = KEY_DELAY;
+    }
+}
+
+void drawSettingsScreen(game_t* game) {
+    gfx_SetColor(0);
+    gfx_FillRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    gfx_SetTextFGColor(148);
+    drawCenteredString2x("Settings", 30);
+
+    /* Show menu on start */
+    gfx_SetTextFGColor(game->menu_cursor == 0 ? 148 : 255);
+    gfx_PrintStringXY("Show menu on start: ", 40, 80);
+    gfx_SetTextFGColor(game->show_start_menu ? 30 : 133);
+    gfx_PrintString(game->show_start_menu ? "ON" : "OFF");
+
+    /* Auto-start rounds */
+    gfx_SetTextFGColor(game->menu_cursor == 1 ? 148 : 255);
+    gfx_PrintStringXY("Auto-start rounds:  ", 40, 100);
+    gfx_SetTextFGColor(game->auto_start ? 30 : 133);
+    gfx_PrintString(game->auto_start ? "ON" : "OFF");
+
+    gfx_SetTextFGColor(80);
+    drawCenteredString("[Del] Back", SCREEN_HEIGHT - 14);
+}
+
+/* ── Difficulty Screen ────────────────────────────────────────────────── */
+
+void handleDifficultyScreen(game_t* game) {
+    kb_Scan();
+    if (game->key_delay > 0) { game->key_delay--; return; }
+
+    if (kb_Data[7] & kb_Down) {
+        if (game->menu_cursor < 2) game->menu_cursor++;
+        game->key_delay = KEY_DELAY;
+    }
+    if (kb_Data[7] & kb_Up) {
+        if (game->menu_cursor > 0) game->menu_cursor--;
+        game->key_delay = KEY_DELAY;
+    }
+
+    if (kb_Data[6] & kb_Enter) {
+        game->difficulty = game->menu_cursor;
+        switch (game->difficulty) {
+            case 0: game->max_round = 39; game->coins = 750; game->hearts = 200; break;
+            case 1: game->max_round = 59; game->coins = 650; game->hearts = 150; break;
+            case 2: game->max_round = 79; game->coins = 650; game->hearts = 100; break;
+        }
+        game->round = 0;
+        game->freeplay = false;
+        game->round_active = game->auto_start;
+        memset(&game->round_state, 0, sizeof(round_state_t));
+        game->round_state.spacing_timer = 1;
+        game->screen = SCREEN_PLAYING;
+        game->key_delay = KEY_DELAY;
+        return;
+    }
+
+    if ((kb_Data[1] & kb_Del) || (kb_Data[6] & kb_Clear)) {
+        game->menu_cursor = 0;
+        game->screen = SCREEN_TITLE;
+        game->key_delay = KEY_DELAY;
+    }
+}
+
+void drawDifficultyScreen(game_t* game) {
+    gfx_SetColor(0);
+    gfx_FillRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    gfx_SetTextFGColor(148);
+    drawCenteredString2x("Difficulty", 30);
+
+    static const char* labels[] = {
+        "Easy - 40 Rounds",
+        "Medium - 60 Rounds",
+        "Hard - 80 Rounds"
+    };
+
+    for (uint8_t i = 0; i < 3; i++) {
+        gfx_SetTextFGColor(i == game->menu_cursor ? 148 : 255);
+        drawCenteredString(labels[i], 80 + i * 24);
+    }
+
+    gfx_SetTextFGColor(80);
+    drawCenteredString("[Del] Back", SCREEN_HEIGHT - 14);
+}
+
+/* ── Game Over Screen ─────────────────────────────────────────────────── */
+
+void handleGameOverScreen(game_t* game) {
+    kb_Scan();
+    if (game->key_delay > 0) { game->key_delay--; return; }
+
+    if (kb_Data[6] & kb_Enter) {
+        clearBloonsAndProjectiles(game);
+        game->screen = SCREEN_SPECTATE;
+        game->key_delay = KEY_DELAY;
+    }
+    if ((kb_Data[1] & kb_Del) || (kb_Data[6] & kb_Clear)) {
+        game->menu_cursor = 0;
+        game->screen = SCREEN_TITLE;
+        game->key_delay = KEY_DELAY;
+    }
+}
+
+void drawGameOverScreen(game_t* game) {
+    gfx_SetColor(0);
+    gfx_FillRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    gfx_SetTextFGColor(133);  /* red */
+    drawCenteredString2x("GAME OVER", 30);
+
+    gfx_SetTextFGColor(255);
+    gfx_PrintStringXY("Round: ", 80, 80);
+    gfx_PrintInt(game->round + 1, 1);
+    gfx_PrintChar('/');
+    gfx_PrintInt(game->max_round + 1, 1);
+
+    gfx_PrintStringXY("Towers: ", 80, 100);
+    gfx_PrintInt(count_towers(game), 1);
+
+    gfx_PrintStringXY("Total Pops: ", 80, 120);
+    gfx_PrintInt(compute_total_pops(game), 1);
+
+    /* Find and display best tower */
+    tower_t* best = NULL;
+    uint16_t best_pops = 0;
+    list_ele_t* curr = game->towers->head;
+    while (curr != NULL) {
+        tower_t* t = (tower_t*)(curr->value);
+        if (t->pop_count > best_pops) {
+            best_pops = t->pop_count;
+            best = t;
+        }
+        curr = curr->next;
+    }
+    if (best != NULL) {
+        gfx_PrintStringXY("Best Tower:", 80, 148);
+        gfx_sprite_t* spr = tower_sprite_table[best->type];
+        int sx = 80;
+        int sy = 164;
+        gfx_TransparentSprite(spr, sx, sy);
+        gfx_PrintStringXY(TOWER_NAMES[best->type], sx + spr->width + 6, sy + 4);
+        gfx_PrintStringXY("Pops: ", sx + spr->width + 6, sy + 16);
+        gfx_PrintInt(best_pops, 1);
+    }
+
+    gfx_SetTextFGColor(148);
+    drawCenteredString("[Enter]Spectate  [Del]Menu", SCREEN_HEIGHT - 16);
+}
+
+/* ── Victory Screen ───────────────────────────────────────────────────── */
+
+void handleVictoryScreen(game_t* game) {
+    kb_Scan();
+    if (game->key_delay > 0) { game->key_delay--; return; }
+
+    if (kb_Data[6] & kb_Enter) {
+        game->freeplay = true;
+        game->round++;
+        memset(&game->round_state, 0, sizeof(round_state_t));
+        game->round_state.spacing_timer = 1;
+        game->round_active = game->auto_start;
+        game->screen = SCREEN_PLAYING;
+        game->key_delay = KEY_DELAY;
+    }
+    if (kb_Data[1] & kb_2nd) {
+        clearBloonsAndProjectiles(game);
+        game->screen = SCREEN_SPECTATE;
+        game->key_delay = KEY_DELAY;
+    }
+    if ((kb_Data[1] & kb_Del) || (kb_Data[6] & kb_Clear)) {
+        game->menu_cursor = 0;
+        game->screen = SCREEN_TITLE;
+        game->key_delay = KEY_DELAY;
+    }
+}
+
+void drawVictoryScreen(game_t* game) {
+    gfx_SetColor(0);
+    gfx_FillRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    gfx_SetTextFGColor(30);  /* green */
+    drawCenteredString2x("VICTORY!", 30);
+
+    gfx_SetTextFGColor(255);
+    gfx_PrintStringXY("Round: ", 80, 80);
+    gfx_PrintInt(game->round + 1, 1);
+    gfx_PrintChar('/');
+    gfx_PrintInt(game->max_round + 1, 1);
+
+    gfx_PrintStringXY("Towers: ", 80, 100);
+    gfx_PrintInt(count_towers(game), 1);
+
+    gfx_PrintStringXY("Total Pops: ", 80, 120);
+    gfx_PrintInt(compute_total_pops(game), 1);
+
+    /* Find and display best tower */
+    tower_t* best = NULL;
+    uint16_t best_pops = 0;
+    list_ele_t* curr = game->towers->head;
+    while (curr != NULL) {
+        tower_t* t = (tower_t*)(curr->value);
+        if (t->pop_count > best_pops) {
+            best_pops = t->pop_count;
+            best = t;
+        }
+        curr = curr->next;
+    }
+    if (best != NULL) {
+        gfx_PrintStringXY("Best Tower:", 80, 148);
+        gfx_sprite_t* spr = tower_sprite_table[best->type];
+        int sx = 80;
+        int sy = 164;
+        gfx_TransparentSprite(spr, sx, sy);
+        gfx_PrintStringXY(TOWER_NAMES[best->type], sx + spr->width + 6, sy + 4);
+        gfx_PrintStringXY("Pops: ", sx + spr->width + 6, sy + 16);
+        gfx_PrintInt(best_pops, 1);
+    }
+
+    gfx_SetTextFGColor(148);
+    drawCenteredString("[Enter]Freeplay [2nd]Spectate [Del]Menu", SCREEN_HEIGHT - 16);
+}
+
+/* ── Spectate Mode ────────────────────────────────────────────────────── */
+
+void handleSpectateMode(game_t* game) {
+    kb_Scan();
+
+    /* Arrow keys to move cursor for viewing */
+    if (kb_Data[7] & kb_Up)    game->cursor.y -= 2;
+    if (kb_Data[7] & kb_Down)  game->cursor.y += 2;
+    if (kb_Data[7] & kb_Left)  game->cursor.x -= 2;
+    if (kb_Data[7] & kb_Right) game->cursor.x += 2;
+
+    if (game->cursor.x < 0) game->cursor.x = 0;
+    if (game->cursor.y < 0) game->cursor.y = 0;
+    if (game->cursor.x >= SCREEN_WIDTH) game->cursor.x = SCREEN_WIDTH - 1;
+    if (game->cursor.y >= SCREEN_HEIGHT) game->cursor.y = SCREEN_HEIGHT - 1;
+
+    /* No simulation — spectate is view-only (bloons already cleared) */
+
+    if ((kb_Data[1] & kb_Del) || (kb_Data[6] & kb_Clear)) {
+        game->menu_cursor = 0;
+        game->screen = SCREEN_TITLE;
+        game->key_delay = KEY_DELAY;
+    }
+}
+
+void drawSpectateMode(game_t* game) {
+    drawMap(game);
+    drawTowers(game);
+    drawStats(game);
+
+    /* Tooltip */
+    gfx_SetTextFGColor(148);
+    drawCenteredString("[Del] Main Menu", 16);
+}
+
 /* ── Main Loop ───────────────────────────────────────────────────────── */
 
 void runGame(void) {
     game_t* game = newGame(NULL, 0);
 
-    /* Try to load a saved game */
-    load_game(game);
+    /* Load settings */
+    load_settings(game);
+
+    /* Decide starting screen */
+    if (game->show_start_menu) {
+        game->screen = SCREEN_TITLE;
+    } else if (save_exists()) {
+        load_game(game);
+        game->screen = SCREEN_PLAYING;
+    } else {
+        game->screen = SCREEN_TITLE;
+    }
 
     while (!game->exit) {
         switch (game->screen) {
+            case SCREEN_TITLE:
+                handleTitleScreen(game);
+                drawTitleScreen(game);
+                break;
+
+            case SCREEN_SETTINGS:
+                handleSettingsScreen(game);
+                drawSettingsScreen(game);
+                break;
+
+            case SCREEN_DIFFICULTY:
+                handleDifficultyScreen(game);
+                drawDifficultyScreen(game);
+                break;
+
             case SCREEN_PLAYING:
                 handleGame(game);
                 /* Fast forward: run a second game tick (no input/draw) */
-                if (game->fast_forward && game->screen == SCREEN_PLAYING) {
+                if (game->fast_forward && game->round_active && game->screen == SCREEN_PLAYING) {
                     spawnBloons(game);
                     updateProjectiles(game);
                     updateBloons(game);
@@ -1391,6 +2282,21 @@ void runGame(void) {
             case SCREEN_UPGRADE:
                 handleUpgradeScreen(game);
                 drawUpgradeScreen(game);
+                break;
+
+            case SCREEN_GAME_OVER:
+                handleGameOverScreen(game);
+                drawGameOverScreen(game);
+                break;
+
+            case SCREEN_VICTORY:
+                handleVictoryScreen(game);
+                drawVictoryScreen(game);
+                break;
+
+            case SCREEN_SPECTATE:
+                handleSpectateMode(game);
+                drawSpectateMode(game);
                 break;
         }
 

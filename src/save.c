@@ -32,11 +32,12 @@ bool save_game(game_t* game) {
     header.version = SAVE_VERSION;
     header.round = game->round;
     header.max_round = game->max_round;
-    header.difficulty = 0;
+    header.difficulty = game->difficulty;
     header.hearts = game->hearts;
     header.coins = game->coins;
     header.num_towers = num_towers;
     header.sandbox = game->SANDBOX ? 1 : 0;
+    header.freeplay = game->freeplay ? 1 : 0;
 
     if (ti_Write(&header, sizeof(save_header_t), 1, slot) != 1) {
         dbg_printf("save_game: failed to write header\n");
@@ -95,9 +96,11 @@ bool load_game(game_t* game) {
 
     game->round = header.round;
     game->max_round = header.max_round;
+    game->difficulty = header.difficulty;
     game->hearts = header.hearts;
     game->coins = header.coins;
     game->SANDBOX = header.sandbox ? true : false;
+    game->freeplay = header.freeplay ? true : false;
 
     /* Read and reconstruct towers */
     for (uint8_t i = 0; i < header.num_towers; i++) {
@@ -136,7 +139,7 @@ bool load_game(game_t* game) {
     /* Reset round state for the loaded round */
     memset(&game->round_state, 0, sizeof(round_state_t));
     game->round_state.spacing_timer = 1;
-    game->round_active = true;
+    game->round_active = game->auto_start;
 
     dbg_printf("load_game: loaded round %d with %d towers\n",
                header.round, header.num_towers);
@@ -146,4 +149,51 @@ bool load_game(game_t* game) {
 void delete_save(void) {
     ti_Delete(SAVE_APPVAR_NAME);
     dbg_printf("delete_save: save deleted\n");
+}
+
+bool save_exists(void) {
+    ti_var_t slot = ti_Open(SAVE_APPVAR_NAME, "r");
+    if (slot == 0) return false;
+    ti_Close(slot);
+    return true;
+}
+
+bool save_settings(game_t* game) {
+    ti_var_t slot = ti_Open(SETTINGS_APPVAR_NAME, "w");
+    if (slot == 0) return false;
+
+    settings_t cfg;
+    cfg.version = 1;
+    cfg.show_start_menu = game->show_start_menu ? 1 : 0;
+    cfg.auto_start = game->auto_start ? 1 : 0;
+
+    if (ti_Write(&cfg, sizeof(settings_t), 1, slot) != 1) {
+        ti_Close(slot);
+        return false;
+    }
+    ti_SetArchiveStatus(true, slot);
+    ti_Close(slot);
+    return true;
+}
+
+bool load_settings(game_t* game) {
+    ti_var_t slot = ti_Open(SETTINGS_APPVAR_NAME, "r");
+    if (slot == 0) {
+        game->show_start_menu = true;
+        game->auto_start = true;
+        return false;
+    }
+
+    settings_t cfg;
+    if (ti_Read(&cfg, sizeof(settings_t), 1, slot) != 1 || cfg.version != 1) {
+        ti_Close(slot);
+        game->show_start_menu = true;
+        game->auto_start = true;
+        return false;
+    }
+
+    game->show_start_menu = cfg.show_start_menu ? true : false;
+    game->auto_start = cfg.auto_start ? true : false;
+    ti_Close(slot);
+    return true;
 }

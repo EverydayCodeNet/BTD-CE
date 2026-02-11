@@ -77,7 +77,7 @@ static const bloon_data_t BLOON_DATA[NUM_BLOON_TYPES] = {
     {   1,  358,    BLOON_RED,       1,    0xFF,            0,   0x00,    2 }, /* Blue    */
     {   1,  461,    BLOON_BLUE,      1,    0xFF,            0,   0x00,    3 }, /* Green   */
     {   1,  819,    BLOON_GREEN,     1,    0xFF,            0,   0x00,    4 }, /* Yellow  */
-    {   1,  896,    BLOON_PINK,      1,    0xFF,            0,   0x00,    5 }, /* Pink    */
+    {   1,  896,    BLOON_YELLOW,    1,    0xFF,            0,   0x00,    5 }, /* Pink    */
     {   1,  461,    BLOON_PINK,      2,    0xFF,            0,   0x02,   11 }, /* Black   */
     {   1,  512,    BLOON_PINK,      2,    0xFF,            0,   0x04,   11 }, /* White   */
     {   1,  256,    BLOON_BLACK,     2,    0xFF,            0,   0x01,   23 }, /* Lead    */
