@@ -282,8 +282,8 @@ static inline void init_tower_sprites(void) {
     tower_sprite_table[TOWER_TACK]      = tack1;
     tower_sprite_table[TOWER_SNIPER]    = sniper1;
     tower_sprite_table[TOWER_BOMB]      = bomber1;
-    tower_sprite_table[TOWER_BOOMERANG] = boomerang1;
-    tower_sprite_table[TOWER_NINJA]     = ninja1;
+    tower_sprite_table[TOWER_BOOMERANG] = ninja1;
+    tower_sprite_table[TOWER_NINJA]     = boomerang1;
     tower_sprite_table[TOWER_ICE]       = ice1;
     tower_sprite_table[TOWER_GLUE]      = glue1;
 

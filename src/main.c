@@ -41,7 +41,7 @@
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
 
-#define MAX_BLOONS      150  /* hard cap on simultaneous bloons to prevent OOM */
+#define MAX_BLOONS      75  /* hard cap — children deferred and drip-fed back in */
 #define FREEZE_DURATION 30   /* frames bloon stays frozen (~0.5s) */
 #define SLOW_DURATION   90   /* frames bloon stays slowed */
 #define SLOW_FACTOR     2    /* speed divisor when glued */
@@ -54,24 +54,8 @@
 #define SPEED_BTN_H 32
 
 #define SP_CELL_SIZE 40  /* spatial partition cell size (bigger = fewer boundary misses) */
-#define DEFERRED_QUEUE_SIZE 64  /* ring buffer for bloon children deferred by cap */
-
-/* Deferred bloon spawn queue — children that couldn't spawn due to MAX_BLOONS */
-typedef struct {
-    uint8_t type;
-    uint8_t modifiers;
-    uint8_t regrow_max;
-    uint8_t slow_timer;
-    uint8_t dot_damage;
-    uint8_t dot_interval;
-    uint16_t segment;
-    position_t position;
-} deferred_bloon_t;
-
-static deferred_bloon_t deferred_queue[DEFERRED_QUEUE_SIZE];
-static uint8_t deferred_head = 0;
-static uint8_t deferred_tail = 0;
-static uint8_t deferred_count = 0;
+/* Cursor acceleration: ramps from 2 to 6 px/frame over ~20 frames of holding */
+static uint8_t cursor_hold_frames = 0;
 
 gfx_sprite_t* bloon_sprite_table[NUM_BLOON_TYPES];
 gfx_sprite_t* bloon_sprite_regrow[NUM_BLOON_TYPES];
@@ -86,10 +70,10 @@ static const uint8_t tower_native_angle[NUM_TOWER_TYPES] = {
     192,  /* TACK */
     192,  /* SNIPER */
     192,  /* BOMB */
-    0,    /* BOOMERANG */
+    192,  /* BOOMERANG */
     192,  /* NINJA */
     0,    /* ICE */
-    0,    /* GLUE */
+    192,  /* GLUE */
 };
 
 /* Projectile sprite native facing direction. */
@@ -400,11 +384,21 @@ bool overlaps_tower(game_t* game, position_t pos, int w, int h) {
 void handlePlayingKeys(game_t* game) {
     kb_Scan();
 
-    /* Movement - always responsive, no debounce */
-    if (kb_Data[7] & kb_Up)    game->cursor.y -= 2;
-    if (kb_Data[7] & kb_Down)  game->cursor.y += 2;
-    if (kb_Data[7] & kb_Left)  game->cursor.x -= 2;
-    if (kb_Data[7] & kb_Right) game->cursor.x += 2;
+    /* Movement - accelerates on hold (2 → 6 px/frame over ~20 frames) */
+    {
+        bool moving = (kb_Data[7] & (kb_Up | kb_Down | kb_Left | kb_Right)) != 0;
+        if (moving) {
+            if (cursor_hold_frames < 60) cursor_hold_frames++;
+        } else {
+            cursor_hold_frames = 0;
+        }
+        int spd = 2 + cursor_hold_frames / 15;  /* 2,3,4,5,6 */
+        if (spd > 6) spd = 6;
+        if (kb_Data[7] & kb_Up)    game->cursor.y -= spd;
+        if (kb_Data[7] & kb_Down)  game->cursor.y += spd;
+        if (kb_Data[7] & kb_Left)  game->cursor.x -= spd;
+        if (kb_Data[7] & kb_Right) game->cursor.x += spd;
+    }
 
     /* Clamp cursor to screen */
     if (game->cursor.x < 0) game->cursor.x = 0;
@@ -1162,53 +1156,32 @@ int moveBloon(game_t* game, bloon_t* bloon) {
 
 /* ── Bloon Popping ───────────────────────────────────────────────────── */
 
-/* Enqueue a child bloon to spawn later when below cap */
-static void defer_child(uint8_t type, uint8_t modifiers, uint8_t regrow_max,
-                        uint16_t segment, position_t pos,
-                        uint8_t slow, uint8_t dot_dmg, uint8_t dot_int) {
-    if (deferred_count >= DEFERRED_QUEUE_SIZE) return;  /* queue full, truly discard */
-    deferred_bloon_t* d = &deferred_queue[deferred_tail];
-    d->type = type;
-    d->modifiers = modifiers;
-    d->regrow_max = regrow_max;
-    d->segment = segment;
-    d->position = pos;
-    d->slow_timer = slow;
-    d->dot_damage = dot_dmg;
-    d->dot_interval = dot_int;
-    deferred_tail = (deferred_tail + 1) % DEFERRED_QUEUE_SIZE;
-    deferred_count++;
-}
-
-/* Spawn deferred children when space opens up (call each frame) */
-void drain_deferred_bloons(game_t* game) {
-    int spawned = 0;
-    while (deferred_count > 0 && game->bloons->total_size < MAX_BLOONS && spawned < 4) {
-        deferred_bloon_t* d = &deferred_queue[deferred_head];
-        bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
-        if (!child) return;
-        memset(child, 0, sizeof(bloon_t));
-        child->type = d->type;
-        child->modifiers = d->modifiers;
-        child->hp = BLOON_DATA[d->type].hp;
-        child->regrow_max = d->regrow_max;
-        child->regrow_timer = REGROW_INTERVAL;
-        child->segment = d->segment;
-        child->position = d->position;
-        if (d->slow_timer > 0) {
-            child->slow_timer = d->slow_timer;
-            child->dot_damage = d->dot_damage;
-            child->dot_interval = d->dot_interval;
-            if (d->dot_damage > 0) {
-                child->dot_tick = d->dot_interval;
-                child->dot_timer = 180;
-            }
+/* Helper: spawn a single child bloon */
+static bloon_t* spawn_child(game_t* game, uint8_t type, uint8_t modifiers,
+                             uint8_t regrow_max, uint16_t segment, position_t pos,
+                             int16_t hp_override,
+                             uint8_t slow, uint8_t dot_dmg, uint8_t dot_int) {
+    bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
+    if (!child) return NULL;
+    memset(child, 0, sizeof(bloon_t));
+    child->type = type;
+    child->modifiers = modifiers;
+    child->hp = hp_override > 0 ? hp_override : BLOON_DATA[type].hp;
+    child->regrow_max = regrow_max;
+    child->regrow_timer = REGROW_INTERVAL;
+    child->segment = segment;
+    child->position = pos;
+    if (slow > 0) {
+        child->slow_timer = slow;
+        child->dot_damage = dot_dmg;
+        child->dot_interval = dot_int;
+        if (dot_dmg > 0) {
+            child->dot_tick = dot_int;
+            child->dot_timer = 180;
         }
-        sp_insert(game->bloons, child->position, child);
-        deferred_head = (deferred_head + 1) % DEFERRED_QUEUE_SIZE;
-        deferred_count--;
-        spawned++;
     }
+    sp_insert(game->bloons, child->position, child);
+    return child;
 }
 
 void popBloon(game_t* game, bloon_t* bloon, position_t pos) {
@@ -1225,61 +1198,38 @@ void popBloon(game_t* game, bloon_t* bloon, position_t pos) {
         inherit_dot_interval = bloon->dot_interval;
     }
 
-    for (int i = 0; i < data->child_count; i++) {
-        if (game->bloons->total_size >= MAX_BLOONS) {
-            defer_child(data->child_type, bloon->modifiers, bloon->regrow_max,
-                        bloon->segment, pos, inherit_slow, inherit_dot_damage, inherit_dot_interval);
-            continue;
-        }
-        bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
-        if (!child) return;
-        memset(child, 0, sizeof(bloon_t));
-        child->type = data->child_type;
-        child->modifiers = bloon->modifiers;
-        child->hp = BLOON_DATA[data->child_type].hp;
-        child->regrow_max = bloon->regrow_max;
-        child->regrow_timer = REGROW_INTERVAL;
-        child->segment = bloon->segment;
-        child->position = pos;
-        if (inherit_slow > 0) {
-            child->slow_timer = inherit_slow;
-            child->dot_damage = inherit_dot_damage;
-            child->dot_interval = inherit_dot_interval;
-            if (inherit_dot_damage > 0) {
-                child->dot_tick = inherit_dot_interval;
-                child->dot_timer = 180;
+    bool at_cap = game->bloons->total_size >= MAX_BLOONS;
+
+    /* Spawn child_type children */
+    if (data->child_count > 0) {
+        if (at_cap && data->child_count > 1) {
+            /* Collapse: 1 child with combined HP */
+            int16_t combined_hp = BLOON_DATA[data->child_type].hp * data->child_count;
+            spawn_child(game, data->child_type, bloon->modifiers, bloon->regrow_max,
+                        bloon->segment, pos, combined_hp,
+                        inherit_slow, inherit_dot_damage, inherit_dot_interval);
+        } else {
+            for (int i = 0; i < data->child_count; i++) {
+                spawn_child(game, data->child_type, bloon->modifiers, bloon->regrow_max,
+                            bloon->segment, pos, 0,
+                            inherit_slow, inherit_dot_damage, inherit_dot_interval);
             }
         }
-        sp_insert(game->bloons, child->position, child);
     }
 
-    if (data->child_type2 != 0xFF) {
-        for (int i = 0; i < data->child_count2; i++) {
-            if (game->bloons->total_size >= MAX_BLOONS) {
-                defer_child(data->child_type2, bloon->modifiers, bloon->regrow_max,
-                            bloon->segment, pos, inherit_slow, inherit_dot_damage, inherit_dot_interval);
-                continue;
+    /* Spawn child_type2 children (e.g. Zebra → 1 Black + 1 White) */
+    if (data->child_type2 != 0xFF && data->child_count2 > 0) {
+        if (at_cap && data->child_count2 > 1) {
+            int16_t combined_hp = BLOON_DATA[data->child_type2].hp * data->child_count2;
+            spawn_child(game, data->child_type2, bloon->modifiers, bloon->regrow_max,
+                        bloon->segment, pos, combined_hp,
+                        inherit_slow, inherit_dot_damage, inherit_dot_interval);
+        } else {
+            for (int i = 0; i < data->child_count2; i++) {
+                spawn_child(game, data->child_type2, bloon->modifiers, bloon->regrow_max,
+                            bloon->segment, pos, 0,
+                            inherit_slow, inherit_dot_damage, inherit_dot_interval);
             }
-            bloon_t* child = safe_malloc(sizeof(bloon_t), __LINE__);
-            if (!child) return;
-            memset(child, 0, sizeof(bloon_t));
-            child->type = data->child_type2;
-            child->modifiers = bloon->modifiers;
-            child->hp = BLOON_DATA[data->child_type2].hp;
-            child->regrow_max = bloon->regrow_max;
-            child->regrow_timer = REGROW_INTERVAL;
-            child->segment = bloon->segment;
-            child->position = pos;
-            if (inherit_slow > 0) {
-                child->slow_timer = inherit_slow;
-                child->dot_damage = inherit_dot_damage;
-                child->dot_interval = inherit_dot_interval;
-                if (inherit_dot_damage > 0) {
-                    child->dot_tick = inherit_dot_interval;
-                    child->dot_timer = 180;
-                }
-            }
-            sp_insert(game->bloons, child->position, child);
         }
     }
 }
@@ -1857,7 +1807,7 @@ void handleGame(game_t* game) {
 
     /* Check for round completion */
     round_state_t* rs = &game->round_state;
-    if (rs->complete && sp_total_size(game->bloons) == 0 && deferred_count == 0) {
+    if (rs->complete && sp_total_size(game->bloons) == 0) {
         {
             int16_t bonus = 100 + (int16_t)game->round;
             if (game->difficulty == 2) bonus = (bonus * 4) / 5;  /* Hard: 0.8x income */
@@ -1882,7 +1832,6 @@ void handleGame(game_t* game) {
     }
 
     spawnBloons(game);
-    drain_deferred_bloons(game);
     updateProjectiles(game);
     updateBloons(game);
     updateTowers(game);
@@ -2422,7 +2371,6 @@ void runGame(void) {
                 /* Fast forward: run a second game tick (no input/draw) */
                 if (game->fast_forward && game->round_active && game->screen == SCREEN_PLAYING) {
                     spawnBloons(game);
-                    drain_deferred_bloons(game);
                     updateProjectiles(game);
                     updateBloons(game);
                     updateTowers(game);
